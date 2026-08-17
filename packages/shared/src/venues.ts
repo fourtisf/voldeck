@@ -1,22 +1,38 @@
 /**
- * Venue classification for the cross-chain launchpad leaderboard.
+ * Venue classification for the per-chain launchpad board.
  * Venue names come from config in sim mode and from GeckoTerminal dex names /
- * Robinfun tags in live mode, so classification is by name pattern.
+ * Robinfun tags in live mode, so classification is by name pattern. Patterns
+ * cover the known memecoin launchpads per chain — extend this list as new
+ * launchpads appear; anything unmatched counts as DEX flow.
  */
 export type VenueKind = 'launchpad' | 'dex';
 
 const LAUNCHPAD_PATTERNS = [
-  'pump',        // Pump.fun / PumpSwap
-  'four.meme', 'fourmeme',
-  'robinfun',
-  'bonk', 'letsbonk', 'launchlab',
+  // Solana
+  'pump',            // Pump.fun / PumpSwap
+  'bonk',            // LetsBonk.fun / Bonk.fun
+  'launchlab',       // Raydium LaunchLab
   'moonshot', 'moonit',
-  'boop',
-  'virtuals',
-  'daos.fun',
-  'flap',
-  'sunpump',
   'believe',
+  'boop',
+  'daos.fun',
+  'jup studio',
+  'bags',
+  'heaven',
+  'time.fun',
+  // BNB Chain
+  'four.meme', 'fourmeme',
+  'grafun', 'gra.fun',
+  'flap',
+  'springboard',     // PancakeSwap Springboard
+  // EVM / other
+  'virtuals',
+  'clanker',
+  'zora',
+  'sunpump',
+  // Robinhood Chain (first-party)
+  'robinfun',
+  // generic
   'launchpad',
 ];
 
