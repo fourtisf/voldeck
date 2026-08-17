@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import SearchBox from './SearchBox';
 
 function nowUTC(): string {
   const d = new Date();
@@ -27,6 +28,7 @@ export default function TopNav() {
         <span>Chain Volume Terminal</span>
       </div>
       <div className="sp"></div>
+      <SearchBox />
       <Clock />
       <div className="live"><span className="ld"></span>Live</div>
     </div>

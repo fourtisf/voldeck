@@ -14,6 +14,7 @@ import {
   type LaunchpadsPayload, type LaunchpadRow,
   type LaunchpadSeriesPayload, type LaunchpadSeriesVenue, type LpRangeKey,
   type LaunchpadTokensPayload, type TokenCategory,
+  type SearchPayload,
 } from '@voldeck/shared';
 import { getRedis } from './cache';
 import { DATA_MODE } from './env';
@@ -397,6 +398,59 @@ export async function buildLaunchpadTokens(
     })),
     mode: DATA_MODE,
   };
+}
+
+/** Global search over chains (config), venues (24h VenueVolume) and projects (LaunchpadToken). */
+export async function buildSearch(q: string): Promise<SearchPayload> {
+  const s = q.trim().toLowerCase();
+
+  const chains = ORDER.filter((c) => {
+    const info = CHAINS[c];
+    return c.toLowerCase().includes(s) || info.name.toLowerCase().includes(s) || info.full.toLowerCase().includes(s);
+  });
+
+  const venueRows = await prisma.venueVolume.groupBy({
+    by: ['chain', 'venue'],
+    where: {
+      venue: { contains: q.trim(), mode: 'insensitive' },
+      ts: { gte: new Date(Date.now() - 24 * 3600_000) },
+    },
+    _sum: { volumeUsd: true },
+  });
+  const venues = venueRows
+    .filter((v) => isChainCode(v.chain))
+    .map((v) => ({
+      chain: v.chain as ChainCode,
+      venue: v.venue,
+      kind: classifyVenue(v.venue),
+      vol24Usd: Number(v._sum.volumeUsd ?? 0),
+    }))
+    .sort((a, b) => b.vol24Usd - a.vol24Usd)
+    .slice(0, 6);
+
+  const tokenRows = await prisma.launchpadToken.findMany({
+    where: {
+      OR: [
+        { symbol: { contains: q.trim(), mode: 'insensitive' } },
+        { name: { contains: q.trim(), mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { vol24Usd: 'desc' },
+    take: 8,
+  });
+  const tokens = tokenRows
+    .filter((t) => isChainCode(t.chain))
+    .map((t) => ({
+      chain: t.chain as ChainCode,
+      venue: t.venue,
+      symbol: t.symbol,
+      name: t.name,
+      category: (t.category as TokenCategory | null) ?? null,
+      mcUsd: t.mcUsd !== null ? Number(t.mcUsd) : null,
+      vol24Usd: Number(t.vol24Usd),
+    }));
+
+  return { q: q.trim(), chains, venues, tokens, mode: DATA_MODE };
 }
 
 export async function buildAlerts(chain: ChainCode | null, limit: number): Promise<AlertRow[]> {

@@ -24,9 +24,13 @@ export default function DetailScreen({ code }: { code: ChainCode }) {
   const { data: al } = useAlerts(code);
   const info = CHAINS[code];
 
-  /* Escape on detail → back to overview (prototype behavior) */
+  /* Escape on detail → back to overview (prototype behavior); ignore while typing (search box) */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') router.push('/'); };
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'Escape') router.push('/');
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [router]);

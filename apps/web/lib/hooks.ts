@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import type {
   OverviewPayload, SeriesPayload, ChainDetailPayload, AlertsPayload,
   LaunchpadsPayload, LaunchpadSeriesPayload, LaunchpadTokensPayload,
-  LpRangeKey, ChainCode, RangeKey,
+  SearchPayload, LpRangeKey, ChainCode, RangeKey,
 } from '@voldeck/shared';
 import { reportFetch } from './conn';
 
@@ -60,6 +60,15 @@ export function useLaunchpadTokens(chain: ChainCode | null, venue: string | null
     qs ? `/api/launchpads/tokens?${qs}` : null,
     fetcher,
     { refreshInterval: 30_000, keepPreviousData: true }
+  );
+}
+
+/** Global search — pass null/short query to pause. No auto-refresh. */
+export function useSearch(q: string | null) {
+  return useSWR<SearchPayload>(
+    q && q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null,
+    fetcher,
+    { refreshInterval: 0, keepPreviousData: true, dedupingInterval: 3_000 }
   );
 }
 

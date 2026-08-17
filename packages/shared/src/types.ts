@@ -1,5 +1,6 @@
 import type { ChainCode } from './chains';
 import type { RangeKey } from './ranges';
+import type { VenueKind } from './venues';
 
 export type DataMode = 'sim' | 'live';
 
@@ -173,6 +174,31 @@ export interface LaunchpadTokensPayload {
   chain: ChainCode;
   venue: string;
   tokens: LaunchpadTokenRow[];
+  mode: DataMode;
+}
+
+export interface SearchVenueHit {
+  chain: ChainCode;
+  venue: string;
+  kind: VenueKind;
+  vol24Usd: number;
+}
+
+export interface SearchTokenHit {
+  chain: ChainCode;
+  venue: string;
+  symbol: string;
+  name: string;
+  category: TokenCategory | null;
+  mcUsd: number | null;
+  vol24Usd: number;
+}
+
+export interface SearchPayload {
+  q: string;
+  chains: ChainCode[];
+  venues: SearchVenueHit[];
+  tokens: SearchTokenHit[];
   mode: DataMode;
 }
 

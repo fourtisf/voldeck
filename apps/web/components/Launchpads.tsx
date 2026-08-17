@@ -7,7 +7,7 @@
  * generated example set; live mode fills the same table from GeckoTerminal
  * pool data. Group headers click through to the chain detail page.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CHAINS, ORDER, fmtUsd, fmtPct, pctCls,
@@ -15,6 +15,7 @@ import {
 } from '@voldeck/shared';
 import { useLaunchpads, useLaunchpadTokens } from '@/lib/hooks';
 import { useQueryState } from '@/lib/useQueryState';
+import { OPEN_VENUE_EVENT, PENDING_VENUE_KEY, type OpenVenueDetail } from '@/lib/openVenue';
 
 type KindFilter = 'all' | VenueKind;
 type ChainFilter = 'all' | ChainCode;
@@ -144,7 +145,40 @@ export default function Launchpads() {
   const [kind, setKind] = useQueryState<KindFilter>('lpk', 'launchpad', KIND_KEYS);
   const [chain, setChain] = useQueryState<ChainFilter>('lp', 'all', CHAIN_FILTERS);
   const [open, setOpen] = useState<string | null>(null);
+  const [scrollKey, setScrollKey] = useState<string | null>(null);
   const { data } = useLaunchpads();
+
+  /* search hits open a venue's drilldown here (event same-page, storage cross-page) */
+  useEffect(() => {
+    const openFrom = (d: OpenVenueDetail) => {
+      setChain(d.chain);
+      setKind('all');
+      const key = d.chain + ':' + d.venue;
+      setOpen(key);
+      setScrollKey(key);
+    };
+    const onEvt = (e: Event) => openFrom((e as CustomEvent<OpenVenueDetail>).detail);
+    window.addEventListener(OPEN_VENUE_EVENT, onEvt);
+    try {
+      const pending = sessionStorage.getItem(PENDING_VENUE_KEY);
+      if (pending) {
+        sessionStorage.removeItem(PENDING_VENUE_KEY);
+        openFrom(JSON.parse(pending) as OpenVenueDetail);
+      }
+    } catch { /* ignore malformed handoff */ }
+    return () => window.removeEventListener(OPEN_VENUE_EVENT, onEvt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!scrollKey || !data) return;
+    const t = setTimeout(() => {
+      document.querySelector(`[data-lprkey="${CSS.escape(scrollKey)}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setScrollKey(null);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [scrollKey, data]);
 
   const all = data?.rows ?? [];
   const chainTotal = (ch: ChainCode) =>
@@ -197,7 +231,7 @@ export default function Launchpads() {
                 const isOpen = open === key;
                 return (
                   <div key={r.venue}>
-                    <div className={'lpr' + (isOpen ? ' open' : '')} onClick={() => setOpen(isOpen ? null : key)}>
+                    <div className={'lpr' + (isOpen ? ' open' : '')} data-lprkey={key} onClick={() => setOpen(isOpen ? null : key)}>
                       <span className="rk">#{i + 1}</span>
                       <span className="nm">{r.venue}</span>
                       <span className="bar"><i style={{ width: (r.volumeUsd / max) * 100 + '%', background: CHAINS[ch].color }}></i></span>

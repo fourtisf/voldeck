@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { isChainCode, isRangeKey, isTokenCategory, ORDER, type ChainCode } from '@voldeck/shared';
 import { API_PORT, WEB_ORIGIN, DATA_MODE } from './env';
 import { cached } from './cache';
-import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads, buildLaunchpadSeries, buildLaunchpadTokens } from './data';
+import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads, buildLaunchpadSeries, buildLaunchpadTokens, buildSearch } from './data';
 
 const app = Fastify({ logger: true });
 
@@ -42,6 +42,12 @@ async function main(): Promise<void> {
     return cached(`voldeck:api:lptokens:${chain}:${venue}:${category ?? 'all'}`, 30, () =>
       buildLaunchpadTokens(chain, venue, category)
     );
+  });
+
+  app.get<{ Querystring: { q?: string } }>('/api/search', async (req, reply) => {
+    const q = (req.query.q ?? '').trim();
+    if (q.length < 2 || q.length > 60) return reply.code(400).send({ error: 'q must be 2-60 chars' });
+    return cached(`voldeck:api:search:${q.toLowerCase()}`, 10, () => buildSearch(q));
   });
 
   app.get<{ Querystring: { range?: string; chains?: string } }>('/api/series', async (req, reply) => {
