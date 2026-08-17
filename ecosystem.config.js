@@ -7,7 +7,7 @@
 module.exports = {
   apps: [
     {
-      name: 'voldeck-web',
+      name: 'volread-web',
       cwd: './apps/web',
       script: 'node_modules/.bin/next',
       args: 'start -p 3020',
@@ -15,14 +15,14 @@ module.exports = {
       time: true,
     },
     {
-      name: 'voldeck-api',
+      name: 'volread-api',
       cwd: './apps/api',
       script: 'dist/index.js',
       max_memory_restart: '384M',
       time: true,
     },
     {
-      name: 'voldeck-worker',
+      name: 'volread-worker',
       cwd: './apps/worker',
       script: 'dist/index.js',
       max_memory_restart: '384M',

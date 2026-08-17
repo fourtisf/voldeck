@@ -113,14 +113,16 @@ pnpm --filter @voldeck/db migrate:deploy
 # --- 6b. Port preflight (don't fight other apps on this VPS) ----------------
 for PORT in 3020 4020; do
   HOLDER="$(ss -ltnp 2>/dev/null | grep ":$PORT " | grep -oP 'users:\(\("\K[^"]+' | head -1 || true)"
-  if [ -n "$HOLDER" ] && ! pm2 jlist 2>/dev/null | grep -q "voldeck"; then
+  if [ -n "$HOLDER" ] && ! pm2 jlist 2>/dev/null | grep -qE "volread|voldeck"; then
     warn "Port $PORT is already used by '$HOLDER' — pick different ports in ecosystem.config.js/.env before continuing."
     exit 1
   fi
 done
 
-# --- 7. PM2 (voldeck apps only — other apps untouched) ----------------------
-say "Starting/reloading PM2 apps (voldeck-web :3020, voldeck-api :4020, voldeck-worker)"
+# --- 7. PM2 (volread apps only — other apps untouched) ----------------------
+# drop legacy-named apps from earlier deploys so they don't hold the ports
+pm2 delete voldeck-web voldeck-api voldeck-worker >/dev/null 2>&1 || true
+say "Starting/reloading PM2 apps (volread-web :3020, volread-api :4020, volread-worker)"
 pm2 startOrReload ecosystem.config.js
 pm2 save
 pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
@@ -147,8 +149,8 @@ fi
 # --- 10. Health check -------------------------------------------------------
 say "Health check"
 sleep 4
-curl -fsS localhost:4020/api/health && echo || warn "API not answering yet — check: pm2 logs voldeck-api"
-curl -fsS -o /dev/null -w "web: HTTP %{http_code}\n" localhost:3020/ || warn "web not answering yet — check: pm2 logs voldeck-web"
+curl -fsS localhost:4020/api/health && echo || warn "API not answering yet — check: pm2 logs volread-api"
+curl -fsS -o /dev/null -w "web: HTTP %{http_code}\n" localhost:3020/ || warn "web not answering yet — check: pm2 logs volread-web"
 
 IP="$(curl -fsS -4 --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 echo
@@ -159,5 +161,5 @@ else
   echo "  Open:  http://$IP:3020"
   echo "  Later: DOMAIN=yourdomain.com bash $REPO_DIR/deploy/deploy.sh  → nginx + certbot"
 fi
-echo "  Logs:  pm2 logs voldeck-worker | voldeck-api | voldeck-web"
-echo "  Live:  edit $REPO_DIR/.env → DATA_MODE=live (+ ROBINFUN_DATABASE_URL), then: pm2 restart voldeck-api voldeck-worker"
+echo "  Logs:  pm2 logs volread-worker | volread-api | volread-web"
+echo "  Live:  edit $REPO_DIR/.env → DATA_MODE=live (+ ROBINFUN_DATABASE_URL), then: pm2 restart volread-api volread-worker"
