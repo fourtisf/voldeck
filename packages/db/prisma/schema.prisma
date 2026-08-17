@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model VolumeBucket {
+  id        BigInt   @id @default(autoincrement())
+  chain     String // SOL | ETH | BSC | RBH
+  tier      String // fine | coarse
+  bucketTs  DateTime // bucket start, UTC-aligned
+  volumeUsd Decimal  @db.Decimal(20, 2)
+  txns      Int?
+
+  @@unique([chain, tier, bucketTs])
+  @@index([chain, tier, bucketTs(sort: Desc)])
+}
+
+model VenueVolume {
+  id        BigInt   @id @default(autoincrement())
+  chain     String
+  venue     String // e.g. "Pump.fun", "Raydium", "PancakeSwap", "Four.meme", "Robinfun"
+  ts        DateTime // hourly
+  volumeUsd Decimal  @db.Decimal(20, 2)
+
+  @@unique([chain, venue, ts])
+}
+
+model Alert {
+  id      BigInt   @id @default(autoincrement())
+  chain   String
+  type    String // surge | fade | rotation
+  message String
+  ts      DateTime @default(now())
+
+  @@index([ts(sort: Desc)])
+  @@index([chain, ts(sort: Desc)])
+}

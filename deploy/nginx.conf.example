@@ -1,0 +1,33 @@
+# VOLDECK nginx site config — replace <DOMAIN> and enable with certbot:
+#   sudo ln -s /etc/nginx/sites-available/voldeck /etc/nginx/sites-enabled/
+#   sudo certbot --nginx -d <DOMAIN>
+server {
+    listen 80;
+    server_name <DOMAIN>;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # API service (Fastify, :4020) — routes are already prefixed /api
+    location /api/ {
+        proxy_pass http://127.0.0.1:4020;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Web app (Next.js, :3020)
+    location / {
+        proxy_pass http://127.0.0.1:3020;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
