@@ -35,16 +35,18 @@ export function isChainCode(v: string): v is ChainCode {
  */
 export const SIM_VENUES: Record<ChainCode, [string, number][]> = {
   SOL: [
-    ['Pump.fun / PumpSwap', 0.34], ['Raydium', 0.21], ['LetsBonk', 0.10], ['Meteora', 0.09],
-    ['Moonshot', 0.05], ['Believe', 0.04], ['Boop.fun', 0.03], ['Jup Studio', 0.03],
-    ['Daos.fun', 0.02], ['Bags', 0.02], ['Other', 0.07],
+    ['Pump.fun / PumpSwap', 0.30], ['Raydium', 0.19], ['LetsBonk', 0.09], ['Meteora', 0.08],
+    ['Moonshot', 0.045], ['Believe', 0.035], ['Boop.fun', 0.03], ['Jup Studio', 0.03],
+    ['Raydium LaunchLab', 0.025], ['Heaven', 0.025], ['Daos.fun', 0.02], ['Bags', 0.02],
+    ['Time.fun', 0.015], ['GoFundMeme', 0.01], ['Other', 0.085],
   ],
   ETH: [
-    ['Uniswap', 0.72], ['SushiSwap', 0.06], ['Virtuals', 0.04], ['Clanker', 0.02], ['Other', 0.16],
+    ['Uniswap', 0.70], ['SushiSwap', 0.06], ['Virtuals', 0.04], ['Clanker', 0.02],
+    ['Zora', 0.02], ['Other', 0.16],
   ],
   BSC: [
-    ['PancakeSwap', 0.40], ['Four.meme', 0.28], ['GraFun', 0.09], ['Flap', 0.07],
-    ['Springboard', 0.05], ['Other', 0.11],
+    ['PancakeSwap', 0.38], ['Four.meme', 0.26], ['GraFun', 0.08], ['Flap', 0.06],
+    ['Springboard', 0.05], ['Meme Rush', 0.04], ['Other', 0.13],
   ],
   RBH: [['Robinfun', 0.82], ['RobinSwap', 0.18]],
 };

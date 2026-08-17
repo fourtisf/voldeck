@@ -20,11 +20,13 @@ const LAUNCHPAD_PATTERNS = [
   'bags',
   'heaven',
   'time.fun',
+  'gofundmeme',
   // BNB Chain
   'four.meme', 'fourmeme',
   'grafun', 'gra.fun',
   'flap',
   'springboard',     // PancakeSwap Springboard
+  'meme rush',       // Binance Wallet Meme Rush
   // EVM / other
   'virtuals',
   'clanker',
