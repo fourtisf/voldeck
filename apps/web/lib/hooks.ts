@@ -52,9 +52,12 @@ export function useLaunchpadSeries(chain: ChainCode, range: LpRangeKey) {
   });
 }
 
-export function useLaunchpadTokens(chain: ChainCode | null, venue: string | null) {
+export function useLaunchpadTokens(chain: ChainCode | null, venue: string | null, category: string | null = null) {
+  const qs = chain && venue
+    ? `chain=${chain}&venue=${encodeURIComponent(venue)}` + (category ? `&category=${category}` : '')
+    : null;
   return useSWR<LaunchpadTokensPayload>(
-    chain && venue ? `/api/launchpads/tokens?chain=${chain}&venue=${encodeURIComponent(venue)}` : null,
+    qs ? `/api/launchpads/tokens?${qs}` : null,
     fetcher,
     { refreshInterval: 30_000, keepPreviousData: true }
   );

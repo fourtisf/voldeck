@@ -27,11 +27,29 @@ const KIND_FILTERS: { key: KindFilter; label: string }[] = [
 const CHAIN_FILTERS: ChainFilter[] = ['all', ...ORDER];
 const KIND_KEYS: KindFilter[] = ['launchpad', 'dex', 'all'];
 
-function catTag(cat: TokenCategory | null) {
+type CatFilter = 'all' | TokenCategory;
+
+const CAT_FILTERS: { key: CatFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'meme', label: 'Meme' },
+  { key: 'ai', label: 'AI' },
+  { key: 'utility', label: 'Utility' },
+];
+
+function catTag(cat: TokenCategory | null, onPick?: (c: TokenCategory) => void) {
   if (!cat) return null;
   const cls = cat === 'ai' ? 'ai' : cat === 'utility' ? 'util' : 'meme';
   const label = cat === 'ai' ? 'AI' : cat === 'utility' ? 'UTIL' : 'MEME';
-  return <span className={'tag ' + cls}>{label}</span>;
+  return (
+    <span
+      className={'tag ' + cls}
+      style={onPick ? { cursor: 'pointer' } : undefined}
+      onClick={onPick ? (e) => { e.stopPropagation(); onPick(cat); } : undefined}
+      title={onPick ? 'Show only ' + label + ' projects' : undefined}
+    >
+      {label}
+    </span>
+  );
 }
 
 function age(iso: string | null): string {
@@ -43,9 +61,28 @@ function age(iso: string | null): string {
 }
 
 function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
-  const { data } = useLaunchpadTokens(chain, venue);
+  const [cat, setCat] = useState<CatFilter>('all');
+  const { data } = useLaunchpadTokens(chain, venue, cat === 'all' ? null : cat);
+  const emptyMsg = !data
+    ? 'Loading…'
+    : cat === 'all'
+      ? 'No project data yet for this venue'
+      : 'No ' + (cat === 'ai' ? 'AI' : cat) + ' projects running on this venue right now';
   return (
     <div className="lptoks">
+      <div className="lptbar">
+        <span className="subt">
+          {cat === 'all' ? 'Top projects · 24h vol' : (cat === 'ai' ? 'AI' : cat === 'utility' ? 'Utility' : 'Meme') + ' projects running · 24h vol'}
+        </span>
+        <span className="sp"></span>
+        <div className="seg">
+          {CAT_FILTERS.map((f) => (
+            <button key={f.key} className={cat === f.key ? 'on' : ''} onClick={() => setCat(f.key)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <table>
         <thead>
           <tr>
@@ -60,7 +97,7 @@ function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
               <td className="l">
                 <span className="tnm">{t.name}</span>
                 <span className="tk2">{t.symbol}</span>{' '}
-                {catTag(t.category)}
+                {catTag(t.category, (c) => setCat(c))}
               </td>
               <td className="tnm">{t.mcUsd !== null ? fmtUsd(t.mcUsd) : '—'}</td>
               <td><span className="sub2">{t.athMcUsd !== null ? fmtUsd(t.athMcUsd) : '—'}</span></td>
@@ -72,7 +109,7 @@ function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
               <td><span className="sub2">{age(t.launchedAt)}</span></td>
             </tr>
           )) : (
-            <tr><td className="l" colSpan={7}><span className="subt">{data ? 'No project data yet for this venue' : 'Loading…'}</span></td></tr>
+            <tr><td className="l" colSpan={7}><span className="subt">{emptyMsg}</span></td></tr>
           )}
         </tbody>
       </table>

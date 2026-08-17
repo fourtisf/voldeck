@@ -46,10 +46,10 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-/** Deterministic category mix: ~60% meme, ~25% AI, ~15% utility. */
+/** Deterministic category mix: ~55% meme, ~30% AI, ~15% utility. */
 function categoryFor(key: string): 'meme' | 'ai' | 'utility' {
   const r = hash01(key);
-  return r < 0.6 ? 'meme' : r < 0.85 ? 'ai' : 'utility';
+  return r < 0.55 ? 'meme' : r < 0.85 ? 'ai' : 'utility';
 }
 
 export async function seedLaunchpadTokens(): Promise<void> {
@@ -62,7 +62,8 @@ export async function seedLaunchpadTokens(): Promise<void> {
       if (existing > 0) continue;
       /* venue weight scales project sizes: flagship launchpads carry 9-figure MCs */
       const venueDayVol = CHAINS[ch].simBase * share;
-      const count = 5 + Math.floor(hash01(ch + venue) * 3); // 5-7
+      // flagship launchpads carry a deeper roster so category filters have depth
+      const count = (vi < 2 ? 8 : 5) + Math.floor(hash01(ch + venue) * 3); // 8-10 top venues, else 5-7
       const used = new Set<string>();
       for (let i = 0; i < count; i++) {
         const cat = categoryFor(ch + venue + i);

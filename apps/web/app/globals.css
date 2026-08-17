@@ -241,6 +241,7 @@ tr.trow .num{color:var(--txt)}
 /* launchpad token drilldown */
 .lptoks{margin:2px 0 10px 30px;border:1px solid var(--line);border-radius:8px;overflow-x:auto;background:#0e1116;animation:fade .15s ease-out}
 .lptoks table{min-width:720px}
+.lptbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)}
 .lptoks th{padding:7px 12px;font-size:10px}
 .lptoks td{padding:0 12px;height:38px;font-size:12px;border-bottom:1px solid var(--line)}
 .lptoks tr:last-child td{border-bottom:none}

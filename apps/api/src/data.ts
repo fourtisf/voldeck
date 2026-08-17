@@ -366,10 +366,15 @@ export async function buildLaunchpadSeries(chain: ChainCode, range: LpRangeKey):
   };
 }
 
-/** Example projects for one launchpad: top tokens by 24h volume. */
-export async function buildLaunchpadTokens(chain: ChainCode, venue: string): Promise<LaunchpadTokensPayload> {
+/**
+ * Example projects for one launchpad: top tokens by 24h volume, optionally
+ * narrowed to one category (e.g. the AI projects currently running there).
+ */
+export async function buildLaunchpadTokens(
+  chain: ChainCode, venue: string, category: TokenCategory | null
+): Promise<LaunchpadTokensPayload> {
   const rows = await prisma.launchpadToken.findMany({
-    where: { chain, venue },
+    where: { chain, venue, ...(category ? { category } : {}) },
     orderBy: { vol24Usd: 'desc' },
     take: 10,
   });

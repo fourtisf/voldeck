@@ -31,12 +31,17 @@ async function main(): Promise<void> {
     return cached(`voldeck:api:lpseries:${chain}:${range}`, 30, () => buildLaunchpadSeries(chain, range));
   });
 
-  app.get<{ Querystring: { chain?: string; venue?: string } }>('/api/launchpads/tokens', async (req, reply) => {
+  app.get<{ Querystring: { chain?: string; venue?: string; category?: string } }>('/api/launchpads/tokens', async (req, reply) => {
     const chain = (req.query.chain ?? '').toUpperCase();
     if (!isChainCode(chain)) return reply.code(400).send({ error: 'bad chain' });
     const venue = (req.query.venue ?? '').trim();
     if (!venue || venue.length > 80) return reply.code(400).send({ error: 'bad venue' });
-    return cached(`voldeck:api:lptokens:${chain}:${venue}`, 30, () => buildLaunchpadTokens(chain, venue));
+    const catRaw = (req.query.category ?? '').toLowerCase();
+    const category = catRaw === 'meme' || catRaw === 'ai' || catRaw === 'utility' ? catRaw : null;
+    if (catRaw && !category) return reply.code(400).send({ error: 'bad category' });
+    return cached(`voldeck:api:lptokens:${chain}:${venue}:${category ?? 'all'}`, 30, () =>
+      buildLaunchpadTokens(chain, venue, category)
+    );
   });
 
   app.get<{ Querystring: { range?: string; chains?: string } }>('/api/series', async (req, reply) => {
