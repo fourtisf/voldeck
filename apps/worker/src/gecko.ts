@@ -50,6 +50,7 @@ interface GeckoPage {
 interface TokenAgg {
   symbol: string;
   name: string;
+  address: string | null;
   vol24: number;
   mc: number | null;
   change24: number | null;
@@ -63,11 +64,11 @@ function guessCategory(name: string, symbol: string): 'meme' | 'ai' | null {
   return 'meme';
 }
 
-async function fetchPage(url: string): Promise<GeckoPage | null> {
+async function fetchJson<T>(url: string): Promise<T | null> {
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetch(url, { headers: { accept: 'application/json' } });
-      if (res.ok) return (await res.json()) as GeckoPage;
+      if (res.ok) return (await res.json()) as T;
       if (res.status === 429 || res.status >= 500) {
         if (attempt >= BACKOFFS_MS.length) return null;
         log.warn('gecko backoff', { url, status: res.status, waitMs: BACKOFFS_MS[attempt] });
@@ -85,6 +86,8 @@ async function fetchPage(url: string): Promise<GeckoPage | null> {
     }
   }
 }
+
+const fetchPage = (url: string) => fetchJson<GeckoPage>(url);
 
 function baseSymbol(poolName: string): string {
   return (poolName.split('/')[0] || '').trim();
@@ -137,6 +140,8 @@ export async function ingestChain(ch: ChainCode): Promise<void> {
       const dexTokens = byDexToken.get(dexId)!;
       const agg = dexTokens.get(tokSymbol) ?? {
         symbol: tokSymbol, name: tokMeta?.name ?? tokSymbol,
+        // token ids are "<network>_<address>"
+        address: baseId ? baseId.slice(baseId.indexOf('_') + 1) : null,
         vol24: 0, mc: null, change24: null, launchedAt: null,
       };
       agg.vol24 += Number(pool.attributes?.volume_usd?.h24 ?? 0) || 0;
@@ -194,10 +199,11 @@ export async function ingestChain(ch: ChainCode): Promise<void> {
       const ath = mc !== null ? Math.max(prevAth ?? 0, mc) : prevAth;
       await prisma.launchpadToken.upsert({
         where: { chain_venue_symbol: { chain: ch, venue, symbol: t.symbol } },
-        update: { name: t.name, vol24Usd: vol24, mcUsd: mc, athMcUsd: ath, change24: t.change24, launchedAt: t.launchedAt ?? undefined },
+        update: { name: t.name, address: t.address, vol24Usd: vol24, mcUsd: mc, athMcUsd: ath, change24: t.change24, launchedAt: t.launchedAt ?? undefined },
         create: {
           chain: ch, venue, symbol: t.symbol, name: t.name,
           category: guessCategory(t.name, t.symbol),
+          address: t.address,
           vol24Usd: vol24, mcUsd: mc, athMcUsd: ath, change24: t.change24,
           launchedAt: t.launchedAt,
         },
@@ -205,11 +211,54 @@ export async function ingestChain(ch: ChainCode): Promise<void> {
     }
   }
 
+  await fetchMissingSocials(ch, net);
+
   await redisSet(`voldeck:txns24:${ch}`, String(tx24), 900);
   log.info('gecko ingest', {
     chain: ch, calls, pools, dropped,
     bucket: bucketTs.toISOString(), volumeUsd: volume, latencyMs: Date.now() - t0,
   });
+}
+
+interface GeckoTokenInfo {
+  data?: {
+    attributes?: {
+      websites?: string[];
+      twitter_handle?: string | null;
+      telegram_handle?: string | null;
+    };
+  };
+}
+
+const SOCIALS_PER_CYCLE = 3;
+
+/**
+ * Slow queue for project socials: each cycle, look up token info for up to
+ * 3 tokens per chain that haven't been checked yet (+3 calls per chain per
+ * 5 min — total stays well under the ~30 req/min free limit). Results are
+ * cached permanently; failed lookups are marked checked so they don't loop.
+ */
+async function fetchMissingSocials(ch: ChainCode, net: string): Promise<void> {
+  const pending = await prisma.launchpadToken.findMany({
+    where: { chain: ch, socialsCheckedAt: null, address: { not: null } },
+    orderBy: { vol24Usd: 'desc' },
+    take: SOCIALS_PER_CYCLE,
+  });
+  for (const t of pending) {
+    const info = await fetchJson<GeckoTokenInfo>(`${GECKO_BASE}/networks/${net}/tokens/${t.address}/info`);
+    const attrs = info?.data?.attributes;
+    await prisma.launchpadToken.update({
+      where: { id: t.id },
+      data: {
+        websiteUrl: attrs?.websites?.[0] ?? null,
+        twitterUrl: attrs?.twitter_handle ? 'https://x.com/' + attrs.twitter_handle : null,
+        telegramUrl: attrs?.telegram_handle ? 'https://t.me/' + attrs.telegram_handle : null,
+        socialsCheckedAt: new Date(),
+      },
+    });
+    await sleep(1_500);
+  }
+  if (pending.length) log.info('socials fetched', { chain: ch, tokens: pending.length });
 }
 
 /** 5-minute cycle with chains staggered 60s apart to stay far under rate limits. */

@@ -52,6 +52,21 @@ function catTag(cat: TokenCategory | null, onPick?: (c: TokenCategory) => void) 
   );
 }
 
+function SocialLinks({ t }: { t: { website: string | null; twitter: string | null; telegram: string | null } }) {
+  const links: [string, string | null][] = [['𝕏', t.twitter], ['TG', t.telegram], ['Web', t.website]];
+  const present = links.filter(([, url]) => url);
+  if (!present.length) return <span className="sub2">—</span>;
+  return (
+    <span className="soc">
+      {present.map(([label, url]) => (
+        <a key={label} href={url!} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+          {label}
+        </a>
+      ))}
+    </span>
+  );
+}
+
 function age(iso: string | null): string {
   if (!iso) return '—';
   const ms = Date.now() - new Date(iso).getTime();
@@ -88,7 +103,7 @@ function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
           <tr>
             <th className="l">Project</th>
             <th>MC</th><th>ATH MC</th><th>Start MC</th>
-            <th>Vol 24H</th><th>Δ 24H</th><th>Age</th>
+            <th>Vol 24H</th><th>Δ 24H</th><th>Age</th><th>Socials</th>
           </tr>
         </thead>
         <tbody>
@@ -107,9 +122,10 @@ function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
                 {t.change24 !== null ? fmtPct(t.change24) : '—'}
               </td>
               <td><span className="sub2">{age(t.launchedAt)}</span></td>
+              <td><SocialLinks t={t} /></td>
             </tr>
           )) : (
-            <tr><td className="l" colSpan={7}><span className="subt">{emptyMsg}</span></td></tr>
+            <tr><td className="l" colSpan={8}><span className="subt">{emptyMsg}</span></td></tr>
           )}
         </tbody>
       </table>

@@ -81,12 +81,19 @@ export async function seedLaunchpadTokens(): Promise<void> {
         const ath = mc * rnd(1.15, 6);
         const start = rnd(4_000, 12_000);
         const vol24 = mc * rnd(0.08, 0.7);
+        /* placeholder socials: .example never resolves (clearly sim), the X
+           link is a real cashtag search, t.me handle is fictional */
+        const slug = pick[0].toLowerCase().replace(/[^a-z0-9]/g, '');
         await prisma.launchpadToken.create({
           data: {
             chain: ch, venue, symbol: pick[1], name: pick[0], category: cat,
             mcUsd: round2(mc), athMcUsd: round2(ath), startMcUsd: round2(start),
             vol24Usd: round2(vol24), change24: rnd(-35, 90),
             launchedAt: new Date(Date.now() - rnd(2, 80) * 24 * 3600_000),
+            websiteUrl: `https://${slug}.example`,
+            twitterUrl: `https://x.com/search?q=%24${pick[1]}`,
+            telegramUrl: `https://t.me/${slug}_portal`,
+            socialsCheckedAt: new Date(),
           },
         });
         created++;

@@ -240,13 +240,19 @@ tr.trow .num{color:var(--txt)}
 
 /* launchpad token drilldown */
 .lptoks{margin:2px 0 10px 30px;border:1px solid var(--line);border-radius:8px;overflow-x:auto;background:#0e1116;animation:fade .15s ease-out}
-.lptoks table{min-width:720px}
+.lptoks table{min-width:820px}
 .lptbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)}
 .lptoks th{padding:7px 12px;font-size:10px}
 .lptoks td{padding:0 12px;height:38px;font-size:12px;border-bottom:1px solid var(--line)}
 .lptoks tr:last-child td{border-bottom:none}
 .lptoks .tnm{font-weight:600;color:#fff}
 .lptoks .tk2{color:var(--mut);font-size:10.5px;margin-left:6px;font-weight:400}
+.soc{display:inline-flex;gap:5px;justify-content:flex-end}
+.soc a{
+  font-size:9.5px;font-weight:600;color:var(--sub);text-decoration:none;
+  padding:2px 6px;border:1px solid var(--line);border-radius:5px;transition:.12s;
+}
+.soc a:hover{color:#fff;border-color:var(--line2);background:var(--srf2)}
 .tag.meme{background:rgba(139,147,161,.12);color:var(--sub)}
 .tag.ai{background:rgba(79,125,255,.12);color:var(--blue)}
 .tag.util{background:rgba(167,139,250,.14);color:#a78bfa}

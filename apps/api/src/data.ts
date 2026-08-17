@@ -391,6 +391,9 @@ export async function buildLaunchpadTokens(
       vol24Usd: Number(r.vol24Usd),
       change24: r.change24,
       launchedAt: r.launchedAt ? r.launchedAt.toISOString() : null,
+      website: r.websiteUrl,
+      twitter: r.twitterUrl,
+      telegram: r.telegramUrl,
     })),
     mode: DATA_MODE,
   };

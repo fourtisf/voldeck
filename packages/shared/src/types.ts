@@ -159,6 +159,9 @@ export interface LaunchpadTokenRow {
   change24: number | null;
   /** ISO timestamp of launch, null if unknown */
   launchedAt: string | null;
+  website: string | null;
+  twitter: string | null;
+  telegram: string | null;
 }
 
 export interface LaunchpadTokensPayload {
