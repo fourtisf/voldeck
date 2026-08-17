@@ -14,22 +14,41 @@ import { log } from './log';
 const prisma = getPrisma();
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
-const NAME_POOLS: Record<'meme' | 'ai' | 'utility', [string, string][]> = {
+const NAME_POOLS: Record<'meme' | 'animal' | 'ai' | 'gaming' | 'politifi' | 'utility', [string, string][]> = {
   meme: [
+    ['Space Potato', 'TATER'], ['Crying Wojak', 'WOJAK'], ['Banana Phone', 'BNPH'],
+    ['Honk Goblin', 'HONK'], ['Sad Broccoli', 'BROC'], ['Melting Cheese', 'CHEEZ'],
+    ['Screaming Lemon', 'LEMON'], ['Cosmic Donut', 'DONUT'], ['Angry Cloud', 'ACLOUD'],
+    ['Potato King', 'PKING'], ['Rubber Chicken', 'RUBCHK'], ['Giga Toast', 'GTOAST'],
+  ],
+  animal: [
     ['Zoomer Frog', 'ZFROG'], ['Sigma Cat', 'SIGCAT'], ['Toaster Dog', 'TOAST'],
-    ['Grumpy Whale', 'GWHALE'], ['Rocket Hamster', 'HAMMY'], ['Space Potato', 'TATER'],
-    ['Crying Wojak', 'WOJAK'], ['Banana Phone', 'BNPH'], ['Turbo Snail', 'TSNAIL'],
+    ['Grumpy Whale', 'GWHALE'], ['Rocket Hamster', 'HAMMY'], ['Turbo Snail', 'TSNAIL'],
     ['Moon Goose', 'GOOSE'], ['Pixel Pug', 'PPUG'], ['Angry Capybara', 'CAPY'],
     ['Laser Duck', 'LDUCK'], ['Chad Penguin', 'CHDPNG'], ['Fomo Ferret', 'FOMOF'],
+    ['Disco Otter', 'DOTTER'], ['Ninja Gecko', 'NGECKO'], ['Baby Moose', 'BMOOSE'],
+    ['Quantum Quokka', 'QUOKKA'],
   ],
   ai: [
     ['Agent Alpha', 'AGENTA'], ['NeuraPad', 'NEURA'], ['PromptChain', 'PRMPT'],
     ['SynthMind', 'SYNTH'], ['DeepSignal', 'DSIG'], ['AI Oracle', 'ORACL'],
     ['CortexSwap', 'CRTX'], ['BotYard', 'BYARD'], ['VectorMuse', 'VMUSE'],
+    ['AutoTrader AI', 'AUTOAI'], ['MindMesh', 'MMESH'], ['Sentient Sock', 'SSOCK'],
+  ],
+  gaming: [
+    ['PixelQuest', 'PXQ'], ['Loot Goblin', 'LOOTG'], ['Arcade Ape', 'ARCAPE'],
+    ['SpeedRun', 'SPDRN'], ['Boss Fight', 'BOSSF'], ['Mana Potion', 'MPOT'],
+    ['Retro Racer', 'RRACER'], ['Guild Coin', 'GUILDC'],
+  ],
+  politifi: [
+    ['Meme Senator', 'SNTR'], ['Ballot Box', 'BALLOT'], ['Filibuster', 'FLBSTR'],
+    ['Lobby Cat', 'LOBBY'], ['Tax Haven', 'THAVEN'], ['Debate Night', 'DEBATE'],
+    ['Executive Order', 'EXORD'], ['Term Limit', 'TLIMIT'],
   ],
   utility: [
     ['ChainPay', 'CPAY'], ['GasSaver', 'GSAVE'], ['BridgeBot', 'BRDG'],
     ['YieldHub', 'YHUB'], ['SnipeGuard', 'SGRD'], ['TxTracker', 'TXTRK'],
+    ['FeeBurner', 'FBURN'], ['NodeRunner', 'NODER'],
   ],
 };
 
@@ -46,10 +65,15 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-/** Deterministic category mix: ~55% meme, ~30% AI, ~15% utility. */
-function categoryFor(key: string): 'meme' | 'ai' | 'utility' {
+/** Deterministic category mix across the six metas. */
+function categoryFor(key: string): keyof typeof NAME_POOLS {
   const r = hash01(key);
-  return r < 0.55 ? 'meme' : r < 0.85 ? 'ai' : 'utility';
+  if (r < 0.28) return 'meme';
+  if (r < 0.50) return 'animal';
+  if (r < 0.68) return 'ai';
+  if (r < 0.78) return 'gaming';
+  if (r < 0.88) return 'politifi';
+  return 'utility';
 }
 
 export async function seedLaunchpadTokens(): Promise<void> {
@@ -62,8 +86,8 @@ export async function seedLaunchpadTokens(): Promise<void> {
       if (existing > 0) continue;
       /* venue weight scales project sizes: flagship launchpads carry 9-figure MCs */
       const venueDayVol = CHAINS[ch].simBase * share;
-      // flagship launchpads carry a deeper roster so category filters have depth
-      const count = (vi < 2 ? 8 : 5) + Math.floor(hash01(ch + venue) * 3); // 8-10 top venues, else 5-7
+      // flagship launchpads carry a deep roster so every category filter has depth
+      const count = (vi < 2 ? 13 : vi < 4 ? 9 : 6) + Math.floor(hash01(ch + venue) * 4); // 13-16 / 9-12 / 6-9
       const used = new Set<string>();
       for (let i = 0; i < count; i++) {
         const cat = categoryFor(ch + venue + i);

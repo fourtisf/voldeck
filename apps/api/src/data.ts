@@ -376,7 +376,7 @@ export async function buildLaunchpadTokens(
   const rows = await prisma.launchpadToken.findMany({
     where: { chain, venue, ...(category ? { category } : {}) },
     orderBy: { vol24Usd: 'desc' },
-    take: 10,
+    take: category ? 10 : 16,
   });
   return {
     chain,

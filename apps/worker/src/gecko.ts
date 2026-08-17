@@ -58,9 +58,13 @@ interface TokenAgg {
 }
 
 /** Best-effort category from the token's name/symbol (live mode has no real taxonomy). */
-function guessCategory(name: string, symbol: string): 'meme' | 'ai' | null {
+function guessCategory(name: string, symbol: string): 'meme' | 'animal' | 'ai' | 'gaming' | 'politifi' | 'utility' {
   const s = (name + ' ' + symbol).toLowerCase();
-  if (/\bai\b|gpt|agent|neural|brain|bot\b/.test(s)) return 'ai';
+  if (/trump|biden|maga|elect|president|politic|senat|congress/.test(s)) return 'politifi';
+  if (/\bai\b|gpt|agent|neural|llm|brain|intellig/.test(s)) return 'ai';
+  if (/game|play|quest|arcade|loot|rpg/.test(s)) return 'gaming';
+  if (/dog|doge|inu|shib|cat\b|kitty|pepe|frog|duck|bird|ape|monkey|hamster|capy|pengu|goat|wolf|fox|bonk|moo\b|pup/.test(s)) return 'animal';
+  if (/swap\b|bridge|stake|yield|payment/.test(s)) return 'utility';
   return 'meme';
 }
 

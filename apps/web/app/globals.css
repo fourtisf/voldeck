@@ -241,7 +241,7 @@ tr.trow .num{color:var(--txt)}
 /* launchpad token drilldown */
 .lptoks{margin:2px 0 10px 30px;border:1px solid var(--line);border-radius:8px;overflow-x:auto;background:#0e1116;animation:fade .15s ease-out}
 .lptoks table{min-width:820px}
-.lptbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.lptbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .lptoks th{padding:7px 12px;font-size:10px}
 .lptoks td{padding:0 12px;height:38px;font-size:12px;border-bottom:1px solid var(--line)}
 .lptoks tr:last-child td{border-bottom:none}
@@ -254,7 +254,10 @@ tr.trow .num{color:var(--txt)}
 }
 .soc a:hover{color:#fff;border-color:var(--line2);background:var(--srf2)}
 .tag.meme{background:rgba(139,147,161,.12);color:var(--sub)}
+.tag.animal{background:rgba(14,203,129,.1);color:var(--up)}
 .tag.ai{background:rgba(79,125,255,.12);color:var(--blue)}
+.tag.game{background:rgba(34,211,238,.12);color:#22d3ee}
+.tag.poli{background:rgba(251,146,60,.14);color:#fb923c}
 .tag.util{background:rgba(167,139,250,.14);color:#a78bfa}
 
 /* ---------- statusbar ---------- */

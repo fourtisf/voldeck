@@ -29,17 +29,23 @@ const KIND_KEYS: KindFilter[] = ['launchpad', 'dex', 'all'];
 
 type CatFilter = 'all' | TokenCategory;
 
+const CAT_META: Record<TokenCategory, { label: string; tag: string; cls: string }> = {
+  meme:     { label: 'Meme',     tag: 'MEME',   cls: 'meme' },
+  animal:   { label: 'Animal',   tag: 'ANIMAL', cls: 'animal' },
+  ai:       { label: 'AI',       tag: 'AI',     cls: 'ai' },
+  gaming:   { label: 'Gaming',   tag: 'GAME',   cls: 'game' },
+  politifi: { label: 'PolitiFi', tag: 'POLI',   cls: 'poli' },
+  utility:  { label: 'Utility',  tag: 'UTIL',   cls: 'util' },
+};
+
 const CAT_FILTERS: { key: CatFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'meme', label: 'Meme' },
-  { key: 'ai', label: 'AI' },
-  { key: 'utility', label: 'Utility' },
+  ...(Object.keys(CAT_META) as TokenCategory[]).map((c) => ({ key: c as CatFilter, label: CAT_META[c].label })),
 ];
 
 function catTag(cat: TokenCategory | null, onPick?: (c: TokenCategory) => void) {
-  if (!cat) return null;
-  const cls = cat === 'ai' ? 'ai' : cat === 'utility' ? 'util' : 'meme';
-  const label = cat === 'ai' ? 'AI' : cat === 'utility' ? 'UTIL' : 'MEME';
+  if (!cat || !CAT_META[cat]) return null;
+  const { tag: label, cls } = CAT_META[cat];
   return (
     <span
       className={'tag ' + cls}
@@ -82,12 +88,12 @@ function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
     ? 'Loading…'
     : cat === 'all'
       ? 'No project data yet for this venue'
-      : 'No ' + (cat === 'ai' ? 'AI' : cat) + ' projects running on this venue right now';
+      : 'No ' + CAT_META[cat].label + ' projects running on this venue right now';
   return (
     <div className="lptoks">
       <div className="lptbar">
         <span className="subt">
-          {cat === 'all' ? 'Top projects · 24h vol' : (cat === 'ai' ? 'AI' : cat === 'utility' ? 'Utility' : 'Meme') + ' projects running · 24h vol'}
+          {cat === 'all' ? 'Top projects · 24h vol' : CAT_META[cat].label + ' projects running · 24h vol'}
         </span>
         <span className="sp"></span>
         <div className="seg">

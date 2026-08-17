@@ -144,7 +144,12 @@ export interface LaunchpadSeriesPayload {
   mode: DataMode;
 }
 
-export type TokenCategory = 'meme' | 'ai' | 'utility';
+export const TOKEN_CATEGORIES = ['meme', 'animal', 'ai', 'gaming', 'politifi', 'utility'] as const;
+export type TokenCategory = (typeof TOKEN_CATEGORIES)[number];
+
+export function isTokenCategory(v: string): v is TokenCategory {
+  return (TOKEN_CATEGORIES as readonly string[]).includes(v);
+}
 
 export interface LaunchpadTokenRow {
   symbol: string;
