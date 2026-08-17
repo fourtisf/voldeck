@@ -3,7 +3,8 @@
 import useSWR from 'swr';
 import type {
   OverviewPayload, SeriesPayload, ChainDetailPayload, AlertsPayload,
-  LaunchpadsPayload, LaunchpadSeriesPayload, LpRangeKey, ChainCode, RangeKey,
+  LaunchpadsPayload, LaunchpadSeriesPayload, LaunchpadTokensPayload,
+  LpRangeKey, ChainCode, RangeKey,
 } from '@voldeck/shared';
 import { reportFetch } from './conn';
 
@@ -49,6 +50,14 @@ export function useLaunchpadSeries(chain: ChainCode, range: LpRangeKey) {
     refreshInterval: 30_000,
     keepPreviousData: true,
   });
+}
+
+export function useLaunchpadTokens(chain: ChainCode | null, venue: string | null) {
+  return useSWR<LaunchpadTokensPayload>(
+    chain && venue ? `/api/launchpads/tokens?chain=${chain}&venue=${encodeURIComponent(venue)}` : null,
+    fetcher,
+    { refreshInterval: 30_000, keepPreviousData: true }
+  );
 }
 
 export function useChainDetail(code: ChainCode) {

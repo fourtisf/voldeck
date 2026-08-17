@@ -235,6 +235,20 @@ tr.trow .num{color:var(--txt)}
 .lpr .bar i{display:block;height:100%;border-radius:99px;transition:width .4s}
 .lpr .pct{width:46px;text-align:right;color:var(--sub);font-size:11.5px}
 .lpr .val{width:70px;text-align:right;font-weight:600;color:#fff;font-size:12px}
+.lpr .cx{width:14px;flex-shrink:0;text-align:center;color:var(--mut);font-size:12px;transition:transform .15s}
+.lpr.open .cx{transform:rotate(90deg);color:var(--txt)}
+
+/* launchpad token drilldown */
+.lptoks{margin:2px 0 10px 30px;border:1px solid var(--line);border-radius:8px;overflow-x:auto;background:#0e1116;animation:fade .15s ease-out}
+.lptoks table{min-width:720px}
+.lptoks th{padding:7px 12px;font-size:10px}
+.lptoks td{padding:0 12px;height:38px;font-size:12px;border-bottom:1px solid var(--line)}
+.lptoks tr:last-child td{border-bottom:none}
+.lptoks .tnm{font-weight:600;color:#fff}
+.lptoks .tk2{color:var(--mut);font-size:10.5px;margin-left:6px;font-weight:400}
+.tag.meme{background:rgba(139,147,161,.12);color:var(--sub)}
+.tag.ai{background:rgba(79,125,255,.12);color:var(--blue)}
+.tag.util{background:rgba(167,139,250,.14);color:#a78bfa}
 
 /* ---------- statusbar ---------- */
 .statusbar{

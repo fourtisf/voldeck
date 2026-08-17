@@ -1,6 +1,7 @@
 import { getPrisma } from '@voldeck/db';
 import { DATA_MODE } from './env';
 import { seedIfEmpty, startSim } from './sim';
+import { startSimTokens } from './simTokens';
 import { startGecko } from './gecko';
 import { startRobinfun } from './robinfun';
 import { startAlertEngine } from './alerts';
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
   if (DATA_MODE === 'sim') {
     await seedIfEmpty();
     startSim();
+    startSimTokens();
   } else {
     startGecko();
     startRobinfun();

@@ -144,6 +144,30 @@ export interface LaunchpadSeriesPayload {
   mode: DataMode;
 }
 
+export type TokenCategory = 'meme' | 'ai' | 'utility';
+
+export interface LaunchpadTokenRow {
+  symbol: string;
+  name: string;
+  category: TokenCategory | null;
+  mcUsd: number | null;
+  /** max MC observed since tracking began (not all-time before that) */
+  athMcUsd: number | null;
+  /** bonding-curve start MC where known */
+  startMcUsd: number | null;
+  vol24Usd: number;
+  change24: number | null;
+  /** ISO timestamp of launch, null if unknown */
+  launchedAt: string | null;
+}
+
+export interface LaunchpadTokensPayload {
+  chain: ChainCode;
+  venue: string;
+  tokens: LaunchpadTokenRow[];
+  mode: DataMode;
+}
+
 export type AlertType = 'surge' | 'fade' | 'rotation';
 
 export interface AlertRow {

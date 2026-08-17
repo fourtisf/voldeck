@@ -1,15 +1,19 @@
 'use client';
 
 /**
- * Per-chain launchpad board: each chain's launchpads ranked against each
- * other (Pump.fun vs LetsBonk vs Moonshot on Solana, Four.meme vs GraFun vs
- * Flap on BNB, ...), last 24h. Chain tabs narrow to one chain; the kind seg
- * switches Launchpads / DEX / All venues. Percentages are the venue's share
- * of that chain's total venue volume; rows click through to chain detail.
+ * Per-chain launchpad board with a project drilldown: click a launchpad row
+ * to expand its example projects (top tokens by 24h volume) — MC, ATH MC,
+ * bonding-curve start MC, 24h volume, Δ24h, and age. Sim mode shows the
+ * generated example set; live mode fills the same table from GeckoTerminal
+ * pool data. Group headers click through to the chain detail page.
  */
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CHAINS, ORDER, fmtUsd, type ChainCode, type VenueKind, type LaunchpadRow } from '@voldeck/shared';
-import { useLaunchpads } from '@/lib/hooks';
+import {
+  CHAINS, ORDER, fmtUsd, fmtPct, pctCls,
+  type ChainCode, type VenueKind, type LaunchpadRow, type TokenCategory,
+} from '@voldeck/shared';
+import { useLaunchpads, useLaunchpadTokens } from '@/lib/hooks';
 import { useQueryState } from '@/lib/useQueryState';
 
 type KindFilter = 'all' | VenueKind;
@@ -23,10 +27,64 @@ const KIND_FILTERS: { key: KindFilter; label: string }[] = [
 const CHAIN_FILTERS: ChainFilter[] = ['all', ...ORDER];
 const KIND_KEYS: KindFilter[] = ['launchpad', 'dex', 'all'];
 
+function catTag(cat: TokenCategory | null) {
+  if (!cat) return null;
+  const cls = cat === 'ai' ? 'ai' : cat === 'utility' ? 'util' : 'meme';
+  const label = cat === 'ai' ? 'AI' : cat === 'utility' ? 'UTIL' : 'MEME';
+  return <span className={'tag ' + cls}>{label}</span>;
+}
+
+function age(iso: string | null): string {
+  if (!iso) return '—';
+  const ms = Date.now() - new Date(iso).getTime();
+  const d = Math.floor(ms / 86_400_000);
+  if (d >= 1) return d + 'd';
+  return Math.max(1, Math.floor(ms / 3_600_000)) + 'h';
+}
+
+function TokenTable({ chain, venue }: { chain: ChainCode; venue: string }) {
+  const { data } = useLaunchpadTokens(chain, venue);
+  return (
+    <div className="lptoks">
+      <table>
+        <thead>
+          <tr>
+            <th className="l">Project</th>
+            <th>MC</th><th>ATH MC</th><th>Start MC</th>
+            <th>Vol 24H</th><th>Δ 24H</th><th>Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data?.tokens.length ? data.tokens.map((t) => (
+            <tr key={t.symbol}>
+              <td className="l">
+                <span className="tnm">{t.name}</span>
+                <span className="tk2">{t.symbol}</span>{' '}
+                {catTag(t.category)}
+              </td>
+              <td className="tnm">{t.mcUsd !== null ? fmtUsd(t.mcUsd) : '—'}</td>
+              <td><span className="sub2">{t.athMcUsd !== null ? fmtUsd(t.athMcUsd) : '—'}</span></td>
+              <td><span className="sub2">{t.startMcUsd !== null ? fmtUsd(t.startMcUsd) : '—'}</span></td>
+              <td className="tnm">{fmtUsd(t.vol24Usd)}</td>
+              <td className={'pcell ' + (t.change24 !== null ? pctCls(t.change24) : '')}>
+                {t.change24 !== null ? fmtPct(t.change24) : '—'}
+              </td>
+              <td><span className="sub2">{age(t.launchedAt)}</span></td>
+            </tr>
+          )) : (
+            <tr><td className="l" colSpan={7}><span className="subt">{data ? 'No project data yet for this venue' : 'Loading…'}</span></td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Launchpads() {
   const router = useRouter();
   const [kind, setKind] = useQueryState<KindFilter>('lpk', 'launchpad', KIND_KEYS);
   const [chain, setChain] = useQueryState<ChainFilter>('lp', 'all', CHAIN_FILTERS);
+  const [open, setOpen] = useState<string | null>(null);
   const { data } = useLaunchpads();
 
   const all = data?.rows ?? [];
@@ -43,7 +101,7 @@ export default function Launchpads() {
     <div className="panel">
       <div className="phead">
         <span className="ttl">Launchpads</span>
-        <span className="subt">memecoin vol per chain · 24h</span>
+        <span className="subt">memecoin vol per chain · 24h · click a row for projects</span>
         <span className="sp"></span>
         <div className="seg">
           <button className={chain === 'all' ? 'on' : ''} onClick={() => setChain('all')}>All chains</button>
@@ -66,7 +124,7 @@ export default function Launchpads() {
           const max = rows[0]?.volumeUsd ?? 1;
           return (
             <div key={ch}>
-              <div className="lpg">
+              <div className="lpg" style={{ cursor: 'pointer' }} onClick={() => router.push('/chain/' + ch)}>
                 <span className="dot" style={{ background: CHAINS[ch].color }}></span>
                 {CHAINS[ch].name}
                 <span className="cs">
@@ -75,15 +133,23 @@ export default function Launchpads() {
                     : ''}
                 </span>
               </div>
-              {rows.length ? rows.map((r, i) => (
-                <div className="lpr" key={r.venue} onClick={() => router.push('/chain/' + ch)}>
-                  <span className="rk">#{i + 1}</span>
-                  <span className="nm">{r.venue}</span>
-                  <span className="bar"><i style={{ width: (r.volumeUsd / max) * 100 + '%', background: CHAINS[ch].color }}></i></span>
-                  <span className="pct">{total > 0 ? ((r.volumeUsd / total) * 100).toFixed(0) + '%' : '--'}</span>
-                  <span className="val">{fmtUsd(r.volumeUsd)}</span>
-                </div>
-              )) : (
+              {rows.length ? rows.map((r, i) => {
+                const key = ch + ':' + r.venue;
+                const isOpen = open === key;
+                return (
+                  <div key={r.venue}>
+                    <div className={'lpr' + (isOpen ? ' open' : '')} onClick={() => setOpen(isOpen ? null : key)}>
+                      <span className="rk">#{i + 1}</span>
+                      <span className="nm">{r.venue}</span>
+                      <span className="bar"><i style={{ width: (r.volumeUsd / max) * 100 + '%', background: CHAINS[ch].color }}></i></span>
+                      <span className="pct">{total > 0 ? ((r.volumeUsd / total) * 100).toFixed(0) + '%' : '--'}</span>
+                      <span className="val">{fmtUsd(r.volumeUsd)}</span>
+                      <span className="cx">›</span>
+                    </div>
+                    {isOpen && <TokenTable chain={ch} venue={r.venue} />}
+                  </div>
+                );
+              }) : (
                 <div className="lpr" style={{ cursor: 'default' }}>
                   <span className="rk"></span>
                   <span className="subt">

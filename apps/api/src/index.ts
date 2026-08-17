@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { isChainCode, isRangeKey, ORDER, type ChainCode } from '@voldeck/shared';
 import { API_PORT, WEB_ORIGIN, DATA_MODE } from './env';
 import { cached } from './cache';
-import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads, buildLaunchpadSeries } from './data';
+import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads, buildLaunchpadSeries, buildLaunchpadTokens } from './data';
 
 const app = Fastify({ logger: true });
 
@@ -29,6 +29,14 @@ async function main(): Promise<void> {
     const rangeRaw = req.query.range ?? '24h';
     const range = rangeRaw === '7d' || rangeRaw === '30d' ? rangeRaw : '24h';
     return cached(`voldeck:api:lpseries:${chain}:${range}`, 30, () => buildLaunchpadSeries(chain, range));
+  });
+
+  app.get<{ Querystring: { chain?: string; venue?: string } }>('/api/launchpads/tokens', async (req, reply) => {
+    const chain = (req.query.chain ?? '').toUpperCase();
+    if (!isChainCode(chain)) return reply.code(400).send({ error: 'bad chain' });
+    const venue = (req.query.venue ?? '').trim();
+    if (!venue || venue.length > 80) return reply.code(400).send({ error: 'bad venue' });
+    return cached(`voldeck:api:lptokens:${chain}:${venue}`, 30, () => buildLaunchpadTokens(chain, venue));
   });
 
   app.get<{ Querystring: { range?: string; chains?: string } }>('/api/series', async (req, reply) => {

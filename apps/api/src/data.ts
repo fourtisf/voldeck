@@ -13,6 +13,7 @@ import {
   type ChainDetailPayload, type AlertRow, type AlertType, type VenueRow,
   type LaunchpadsPayload, type LaunchpadRow,
   type LaunchpadSeriesPayload, type LaunchpadSeriesVenue, type LpRangeKey,
+  type LaunchpadTokensPayload, type TokenCategory,
 } from '@voldeck/shared';
 import { getRedis } from './cache';
 import { DATA_MODE } from './env';
@@ -361,6 +362,31 @@ export async function buildLaunchpadSeries(chain: ChainCode, range: LpRangeKey):
     bucketMs: HOUR * cfg.agg,
     anchorTs: anchorHour - (cfg.agg - 1) * HOUR,
     venues,
+    mode: DATA_MODE,
+  };
+}
+
+/** Example projects for one launchpad: top tokens by 24h volume. */
+export async function buildLaunchpadTokens(chain: ChainCode, venue: string): Promise<LaunchpadTokensPayload> {
+  const rows = await prisma.launchpadToken.findMany({
+    where: { chain, venue },
+    orderBy: { vol24Usd: 'desc' },
+    take: 10,
+  });
+  return {
+    chain,
+    venue,
+    tokens: rows.map((r) => ({
+      symbol: r.symbol,
+      name: r.name,
+      category: (r.category as TokenCategory | null) ?? null,
+      mcUsd: r.mcUsd !== null ? Number(r.mcUsd) : null,
+      athMcUsd: r.athMcUsd !== null ? Number(r.athMcUsd) : null,
+      startMcUsd: r.startMcUsd !== null ? Number(r.startMcUsd) : null,
+      vol24Usd: Number(r.vol24Usd),
+      change24: r.change24,
+      launchedAt: r.launchedAt ? r.launchedAt.toISOString() : null,
+    })),
     mode: DATA_MODE,
   };
 }

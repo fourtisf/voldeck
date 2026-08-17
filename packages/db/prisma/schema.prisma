@@ -29,6 +29,25 @@ model VenueVolume {
   @@unique([chain, venue, ts])
 }
 
+model LaunchpadToken {
+  id         BigInt    @id @default(autoincrement())
+  chain      String
+  venue      String
+  symbol     String
+  name       String
+  category   String? // meme | ai | utility (best-effort in live mode)
+  mcUsd      Decimal?  @db.Decimal(20, 2)
+  athMcUsd   Decimal?  @db.Decimal(20, 2) // max MC observed since tracking began
+  startMcUsd Decimal?  @db.Decimal(20, 2) // bonding-curve start MC where known
+  vol24Usd   Decimal   @db.Decimal(20, 2)
+  change24   Float?
+  launchedAt DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([chain, venue, symbol])
+  @@index([chain, venue, vol24Usd(sort: Desc)])
+}
+
 model Alert {
   id      BigInt   @id @default(autoincrement())
   chain   String

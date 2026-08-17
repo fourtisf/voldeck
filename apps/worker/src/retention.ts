@@ -26,6 +26,10 @@ export async function runRetention(): Promise<void> {
   const venues = await prisma.venueVolume.deleteMany({
     where: { ts: { lt: daysAgo(VENUE_RETENTION_DAYS) } },
   });
+  // tokens that stopped appearing in ingest go stale and fall out
+  await prisma.launchpadToken.deleteMany({
+    where: { updatedAt: { lt: daysAgo(7) } },
+  });
   if (fine.count || coarse.count || alerts.count || venues.count) {
     log.info('retention swept', {
       fine: fine.count, coarse: coarse.count, alerts: alerts.count, venues: venues.count,
