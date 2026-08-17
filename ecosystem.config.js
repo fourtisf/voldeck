@@ -9,7 +9,9 @@ module.exports = {
     {
       name: 'volread-web',
       cwd: './apps/web',
-      script: 'node_modules/.bin/next',
+      // real JS entry — pnpm's .bin shims are shell scripts, which pm2's
+      // node interpreter cannot execute (instant crash loop)
+      script: 'node_modules/next/dist/bin/next',
       args: 'start -p 3020',
       max_memory_restart: '512M',
       time: true,
