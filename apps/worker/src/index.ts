@@ -2,7 +2,7 @@ import { getPrisma } from '@voldeck/db';
 import { DATA_MODE } from './env';
 import { seedIfEmpty, startSim } from './sim';
 import { startSimTokens } from './simTokens';
-import { startGecko } from './gecko';
+import { startIngest } from './sources';
 import { startRobinfun } from './robinfun';
 import { startAlertEngine } from './alerts';
 import { startRollup } from './rollup';
@@ -18,7 +18,7 @@ async function main(): Promise<void> {
     startSim();
     startSimTokens();
   } else {
-    startGecko();
+    startIngest();
     startRobinfun();
     startRollup();
   }

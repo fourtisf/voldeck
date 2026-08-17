@@ -1,21 +1,17 @@
 /**
- * Live ingestion for SOL / ETH / BSC via GeckoTerminal (free tier ~30 req/min).
- *
- * Every 5 minutes per chain (chains staggered 60s apart):
- *   pools?page=1..8&sort=h24_volume_usd_desc&include=dex  → top ~160 pools
- *   → drop pools whose BASE token is denylisted (majors/stables/LSTs)
- *   → sum volume_usd.m5            → that fine bucket's chain volume
- *   → sum per dex                  → hourly VenueVolume rows
- *   → sum transactions.h24         → Redis txns cache
- *
- * Budget: 4 chains × 8 pages = 32 calls / 5 min ≈ 6.4 req/min.
- * On 429: exponential backoff; if the cycle still fails, no bucket row is
- * written — the API returns null and the chart renders a gap (not zero).
+ * GeckoTerminal source (free, ~30 req/min): full top-pools sweep for a chain.
+ * In the multi-source setup this runs as DISCOVERY every ~30 min per chain
+ * (it both ingests the tick and refreshes the TrackedPool set that the
+ * DexScreener refresher works from), and as FALLBACK whenever a DexScreener
+ * refresh fails. Budget worst case stays far under the rate limit.
  */
 import { getPrisma } from '@voldeck/db';
-import { CHAINS, ORDER, isDenylisted, classifyVenue, FINE_MS, type ChainCode } from '@voldeck/shared';
+import { CHAINS, isDenylisted, type ChainCode } from '@voldeck/shared';
 import { GECKO_BASE } from './env';
-import { redisSet } from './redis';
+import {
+  writeFineBucket, incrementVenueHour, upsertLaunchpadTokens, cacheTxns24,
+  round2, type LiveTokenAgg,
+} from './ingestCommon';
 import { log } from './log';
 
 const prisma = getPrisma();
@@ -26,7 +22,31 @@ const BACKOFFS_MS = [2_000, 4_000, 8_000, 16_000];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+export async function fetchJson<T>(url: string): Promise<T | null> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/json' } });
+      if (res.ok) return (await res.json()) as T;
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt >= BACKOFFS_MS.length) return null;
+        log.warn('source backoff', { url, status: res.status, waitMs: BACKOFFS_MS[attempt] });
+        await sleep(BACKOFFS_MS[attempt]);
+        continue;
+      }
+      log.warn('source request failed', { url, status: res.status });
+      return null;
+    } catch (e) {
+      if (attempt >= BACKOFFS_MS.length) {
+        log.warn('source network error', { url, error: String(e) });
+        return null;
+      }
+      await sleep(BACKOFFS_MS[attempt]);
+    }
+  }
+}
+
 interface GeckoPool {
+  id?: string; // "<network>_<pooladdress>"
   attributes: {
     name: string; // "PEPE / WETH"
     volume_usd: Record<string, string | null>;
@@ -47,73 +67,29 @@ interface GeckoPage {
   included?: { id: string; type: string; attributes?: { name?: string; symbol?: string } }[];
 }
 
-interface TokenAgg {
-  symbol: string;
-  name: string;
-  address: string | null;
-  vol24: number;
-  mc: number | null;
-  change24: number | null;
-  launchedAt: Date | null;
-}
-
-/** Best-effort category from the token's name/symbol (live mode has no real taxonomy). */
-function guessCategory(name: string, symbol: string): 'meme' | 'animal' | 'ai' | 'gaming' | 'politifi' | 'utility' {
-  const s = (name + ' ' + symbol).toLowerCase();
-  if (/trump|biden|maga|elect|president|politic|senat|congress/.test(s)) return 'politifi';
-  if (/\bai\b|gpt|agent|neural|llm|brain|intellig/.test(s)) return 'ai';
-  if (/game|play|quest|arcade|loot|rpg/.test(s)) return 'gaming';
-  if (/dog|doge|inu|shib|cat\b|kitty|pepe|frog|duck|bird|ape|monkey|hamster|capy|pengu|goat|wolf|fox|bonk|moo\b|pup/.test(s)) return 'animal';
-  if (/swap\b|bridge|stake|yield|payment/.test(s)) return 'utility';
-  return 'meme';
-}
-
-async function fetchJson<T>(url: string): Promise<T | null> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const res = await fetch(url, { headers: { accept: 'application/json' } });
-      if (res.ok) return (await res.json()) as T;
-      if (res.status === 429 || res.status >= 500) {
-        if (attempt >= BACKOFFS_MS.length) return null;
-        log.warn('gecko backoff', { url, status: res.status, waitMs: BACKOFFS_MS[attempt] });
-        await sleep(BACKOFFS_MS[attempt]);
-        continue;
-      }
-      log.warn('gecko request failed', { url, status: res.status });
-      return null;
-    } catch (e) {
-      if (attempt >= BACKOFFS_MS.length) {
-        log.warn('gecko network error', { url, error: String(e) });
-        return null;
-      }
-      await sleep(BACKOFFS_MS[attempt]);
-    }
-  }
-}
-
-const fetchPage = (url: string) => fetchJson<GeckoPage>(url);
-
 function baseSymbol(poolName: string): string {
   return (poolName.split('/')[0] || '').trim();
 }
 
-export async function ingestChain(ch: ChainCode): Promise<void> {
+const afterUnderscore = (id: string) => id.slice(id.indexOf('_') + 1);
+
+/** Full GeckoTerminal ingest for one chain tick. Also refreshes TrackedPool. */
+export async function ingestChainGecko(ch: ChainCode): Promise<boolean> {
   const net = CHAINS[ch].geckoNetwork;
-  if (!net) return;
+  if (!net) return false;
   const t0 = Date.now();
-  let calls = 0;
-  let volM5 = 0, txM5 = 0, tx24 = 0, pools = 0, dropped = 0;
-  const byDex = new Map<string, number>();
+  let calls = 0, volM5 = 0, txM5 = 0, tx24 = 0, pools = 0, dropped = 0;
+  const byVenue = new Map<string, number>();
   const dexNames = new Map<string, string>();
   const tokenNames = new Map<string, { name: string; symbol: string }>();
-  /* per dex venue: per base token aggregation for the launchpad drilldown */
-  const byDexToken = new Map<string, Map<string, TokenAgg>>();
+  const byVenueToken = new Map<string, Map<string, LiveTokenAgg>>();
+  const tracked: { address: string; dexName: string; baseSymbol: string; baseName: string; baseAddress: string | null; vol24: number }[] = [];
   let anyPageOk = false;
 
   for (let page = 1; page <= PAGES; page++) {
     const url = `${GECKO_BASE}/networks/${net}/pools?page=${page}&sort=h24_volume_usd_desc&include=dex,base_token`;
     calls++;
-    const json = await fetchPage(url);
+    const json = await fetchJson<GeckoPage>(url);
     if (!json) continue;
     anyPageOk = true;
     for (const inc of json.included ?? []) {
@@ -132,23 +108,33 @@ export async function ingestChain(ch: ChainCode): Promise<void> {
       txM5 += (t5?.buys ?? 0) + (t5?.sells ?? 0);
       const t24 = pool.attributes?.transactions?.h24;
       tx24 += (t24?.buys ?? 0) + (t24?.sells ?? 0);
+
       const dexId = pool.relationships?.dex?.data?.id;
       if (!dexId) continue;
-      byDex.set(dexId, (byDex.get(dexId) ?? 0) + m5);
+      const venue = dexNames.get(dexId) ?? dexId;
+      byVenue.set(venue, (byVenue.get(venue) ?? 0) + m5);
 
-      /* token aggregation (drilldown) — same payload, no extra calls */
       const baseId = pool.relationships?.base_token?.data?.id;
       const tokMeta = baseId ? tokenNames.get(baseId) : undefined;
       const tokSymbol = tokMeta?.symbol ?? sym;
-      if (!byDexToken.has(dexId)) byDexToken.set(dexId, new Map());
-      const dexTokens = byDexToken.get(dexId)!;
+      const tokName = tokMeta?.name ?? tokSymbol;
+      const tokAddress = baseId ? afterUnderscore(baseId) : null;
+      const vol24 = Number(pool.attributes?.volume_usd?.h24 ?? 0) || 0;
+
+      if (pool.id) {
+        tracked.push({
+          address: afterUnderscore(pool.id), dexName: venue,
+          baseSymbol: tokSymbol, baseName: tokName, baseAddress: tokAddress, vol24,
+        });
+      }
+
+      if (!byVenueToken.has(venue)) byVenueToken.set(venue, new Map());
+      const dexTokens = byVenueToken.get(venue)!;
       const agg = dexTokens.get(tokSymbol) ?? {
-        symbol: tokSymbol, name: tokMeta?.name ?? tokSymbol,
-        // token ids are "<network>_<address>"
-        address: baseId ? baseId.slice(baseId.indexOf('_') + 1) : null,
+        symbol: tokSymbol, name: tokName, address: tokAddress,
         vol24: 0, mc: null, change24: null, launchedAt: null,
       };
-      agg.vol24 += Number(pool.attributes?.volume_usd?.h24 ?? 0) || 0;
+      agg.vol24 += vol24;
       const mc = Number(pool.attributes?.market_cap_usd ?? pool.attributes?.fdv_usd ?? NaN);
       if (Number.isFinite(mc) && mc > 0) agg.mc = Math.max(agg.mc ?? 0, mc);
       const chg = Number(pool.attributes?.price_change_percentage?.h24 ?? NaN);
@@ -161,67 +147,31 @@ export async function ingestChain(ch: ChainCode): Promise<void> {
   }
 
   if (!anyPageOk) {
-    // Bucket intentionally left missing → renders as a gap client-side.
     log.warn('gecko cycle failed — bucket gap', { chain: ch, calls });
-    return;
+    return false;
   }
 
-  // The m5 rolling window ≈ the just-completed aligned 5m bucket.
-  const bucketTs = new Date(Math.floor(Date.now() / FINE_MS) * FINE_MS - FINE_MS);
-  const volume = Math.round(volM5 * 100) / 100;
-  await prisma.volumeBucket.upsert({
-    where: { chain_tier_bucketTs: { chain: ch, tier: 'fine', bucketTs } },
-    update: { volumeUsd: volume, txns: txM5 },
-    create: { chain: ch, tier: 'fine', bucketTs, volumeUsd: volume, txns: txM5 },
-  });
+  const bucketTs = await writeFineBucket(ch, volM5, txM5);
+  await incrementVenueHour(ch, byVenue);
+  await upsertLaunchpadTokens(ch, byVenueToken);
+  await cacheTxns24(ch, tx24);
 
-  const hourTs = new Date(Math.floor(Date.now() / 3600_000) * 3600_000);
-  for (const [dexId, vol] of byDex) {
-    const venue = dexNames.get(dexId) ?? dexId;
-    const v = Math.round(vol * 100) / 100;
-    if (v <= 0) continue;
-    await prisma.venueVolume.upsert({
-      where: { chain_venue_ts: { chain: ch, venue, ts: hourTs } },
-      update: { volumeUsd: { increment: v } },
-      create: { chain: ch, venue, ts: hourTs, volumeUsd: v },
+  /* refresh the tracked-pool set the DexScreener refresher works from */
+  const now = new Date();
+  for (const p of tracked) {
+    await prisma.trackedPool.upsert({
+      where: { chain_address: { chain: ch, address: p.address } },
+      update: { dexName: p.dexName, baseSymbol: p.baseSymbol, baseName: p.baseName, baseAddress: p.baseAddress, vol24Usd: round2(p.vol24), lastSeenAt: now },
+      create: { chain: ch, address: p.address, dexName: p.dexName, baseSymbol: p.baseSymbol, baseName: p.baseName, baseAddress: p.baseAddress, vol24Usd: round2(p.vol24), lastSeenAt: now },
     });
   }
 
-  /* top tokens per LAUNCHPAD venue → drilldown table (ATH MC ratchets up) */
-  for (const [dexId, dexTokens] of byDexToken) {
-    const venue = dexNames.get(dexId) ?? dexId;
-    if (classifyVenue(venue) !== 'launchpad') continue;
-    const top = [...dexTokens.values()].sort((a, b) => b.vol24 - a.vol24).slice(0, 8);
-    for (const t of top) {
-      const vol24 = Math.round(t.vol24 * 100) / 100;
-      const mc = t.mc !== null ? Math.round(t.mc * 100) / 100 : null;
-      const existing = await prisma.launchpadToken.findUnique({
-        where: { chain_venue_symbol: { chain: ch, venue, symbol: t.symbol } },
-        select: { athMcUsd: true },
-      });
-      const prevAth = existing?.athMcUsd !== null && existing?.athMcUsd !== undefined ? Number(existing.athMcUsd) : null;
-      const ath = mc !== null ? Math.max(prevAth ?? 0, mc) : prevAth;
-      await prisma.launchpadToken.upsert({
-        where: { chain_venue_symbol: { chain: ch, venue, symbol: t.symbol } },
-        update: { name: t.name, address: t.address, vol24Usd: vol24, mcUsd: mc, athMcUsd: ath, change24: t.change24, launchedAt: t.launchedAt ?? undefined },
-        create: {
-          chain: ch, venue, symbol: t.symbol, name: t.name,
-          category: guessCategory(t.name, t.symbol),
-          address: t.address,
-          vol24Usd: vol24, mcUsd: mc, athMcUsd: ath, change24: t.change24,
-          launchedAt: t.launchedAt,
-        },
-      });
-    }
-  }
-
   await fetchMissingSocials(ch, net);
-
-  await redisSet(`voldeck:txns24:${ch}`, String(tx24), 900);
   log.info('gecko ingest', {
-    chain: ch, calls, pools, dropped,
-    bucket: bucketTs.toISOString(), volumeUsd: volume, latencyMs: Date.now() - t0,
+    chain: ch, source: 'gecko', calls, pools, dropped, tracked: tracked.length,
+    bucket: bucketTs.toISOString(), volumeUsd: round2(volM5), latencyMs: Date.now() - t0,
   });
+  return true;
 }
 
 interface GeckoTokenInfo {
@@ -236,12 +186,7 @@ interface GeckoTokenInfo {
 
 const SOCIALS_PER_CYCLE = 3;
 
-/**
- * Slow queue for project socials: each cycle, look up token info for up to
- * 3 tokens per chain that haven't been checked yet (+3 calls per chain per
- * 5 min — total stays well under the ~30 req/min free limit). Results are
- * cached permanently; failed lookups are marked checked so they don't loop.
- */
+/** Fallback socials queue for tokens DexScreener had no socials for. */
 async function fetchMissingSocials(ch: ChainCode, net: string): Promise<void> {
   const pending = await prisma.launchpadToken.findMany({
     where: { chain: ch, socialsCheckedAt: null, address: { not: null } },
@@ -263,19 +208,4 @@ async function fetchMissingSocials(ch: ChainCode, net: string): Promise<void> {
     await sleep(1_500);
   }
   if (pending.length) log.info('socials fetched', { chain: ch, tokens: pending.length });
-}
-
-/** 5-minute cycle with chains staggered 60s apart to stay far under rate limits. */
-export function startGecko(): void {
-  const chains = ORDER.filter((c) => CHAINS[c].geckoNetwork);
-  const cycle = () => {
-    chains.forEach((ch, i) => {
-      setTimeout(() => {
-        ingestChain(ch).catch((e) => log.error(`gecko ingest ${ch} failed`, e));
-      }, i * 60_000);
-    });
-  };
-  cycle();
-  setInterval(cycle, 5 * 60_000);
-  log.info('gecko scheduler started', { chains, pages: PAGES });
 }

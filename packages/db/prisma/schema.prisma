@@ -53,6 +53,21 @@ model LaunchpadToken {
   @@index([chain, venue, vol24Usd(sort: Desc)])
 }
 
+model TrackedPool {
+  id          BigInt   @id @default(autoincrement())
+  chain       String
+  address     String // pool/pair address on-chain
+  dexName     String // canonical venue name (from discovery)
+  baseSymbol  String
+  baseName    String
+  baseAddress String?
+  vol24Usd    Decimal  @db.Decimal(20, 2)
+  lastSeenAt  DateTime
+
+  @@unique([chain, address])
+  @@index([chain, vol24Usd(sort: Desc)])
+}
+
 model Alert {
   id      BigInt   @id @default(autoincrement())
   chain   String

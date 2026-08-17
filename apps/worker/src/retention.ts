@@ -30,6 +30,10 @@ export async function runRetention(): Promise<void> {
   await prisma.launchpadToken.deleteMany({
     where: { updatedAt: { lt: daysAgo(7) } },
   });
+  // pools that fell out of the top set stop being tracked
+  await prisma.trackedPool.deleteMany({
+    where: { lastSeenAt: { lt: daysAgo(3) } },
+  });
   if (fine.count || coarse.count || alerts.count || venues.count) {
     log.info('retention swept', {
       fine: fine.count, coarse: coarse.count, alerts: alerts.count, venues: venues.count,
