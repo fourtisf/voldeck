@@ -15,12 +15,12 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.WEB_ORIGIN || 'http://localhost:3020'),
-  title: 'VOLDECK — Multi-Chain Memecoin Volume Terminal',
+  title: 'VOLREAD — Multi-Chain Memecoin Volume Terminal',
   description:
-    'Aggregate memecoin trading volume per chain — Solana, Ethereum, BNB Chain and Robinhood Chain. Live dominance, rotation and flow alerts.',
+    'Aggregate memecoin trading volume per chain — Solana, Ethereum, BNB Chain and Robinhood Chain. Live dominance, rotation, launchpad wars and flow alerts.',
   openGraph: {
-    title: 'VOLDECK — Multi-Chain Memecoin Volume Terminal',
-    description: 'Aggregate memecoin trading volume per chain, live.',
+    title: 'VOLREAD — Multi-Chain Memecoin Volume Terminal',
+    description: 'Read the volume: aggregate memecoin trading volume per chain, live.',
     images: ['/og.png'],
   },
 };

@@ -110,6 +110,15 @@ say "Applying database migrations"
 set -a; . "$REPO_DIR/.env"; set +a
 pnpm --filter @voldeck/db migrate:deploy
 
+# --- 6b. Port preflight (don't fight other apps on this VPS) ----------------
+for PORT in 3020 4020; do
+  HOLDER="$(ss -ltnp 2>/dev/null | grep ":$PORT " | grep -oP 'users:\(\("\K[^"]+' | head -1 || true)"
+  if [ -n "$HOLDER" ] && ! pm2 jlist 2>/dev/null | grep -q "voldeck"; then
+    warn "Port $PORT is already used by '$HOLDER' — pick different ports in ecosystem.config.js/.env before continuing."
+    exit 1
+  fi
+done
+
 # --- 7. PM2 (voldeck apps only — other apps untouched) ----------------------
 say "Starting/reloading PM2 apps (voldeck-web :3020, voldeck-api :4020, voldeck-worker)"
 pm2 startOrReload ecosystem.config.js
@@ -132,7 +141,7 @@ if [ -n "$DOMAIN" ]; then
   sed "s/<DOMAIN>/$DOMAIN/g" "$REPO_DIR/deploy/nginx.conf.example" > /etc/nginx/sites-available/voldeck
   ln -sf /etc/nginx/sites-available/voldeck /etc/nginx/sites-enabled/voldeck
   nginx -t && systemctl reload nginx
-  ok "nginx serving http://$DOMAIN  → run for SSL:  certbot --nginx -d $DOMAIN"
+  ok "nginx serving http://$DOMAIN  → run for SSL:  certbot --nginx -d $DOMAIN -d www.$DOMAIN"
 fi
 
 # --- 10. Health check -------------------------------------------------------
@@ -143,9 +152,9 @@ curl -fsS -o /dev/null -w "web: HTTP %{http_code}\n" localhost:3020/ || warn "we
 
 IP="$(curl -fsS -4 --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 echo
-ok "DONE — VOLDECK deployed (SIM mode)."
+ok "DONE — VOLREAD deployed (SIM mode)."
 if [ -n "$DOMAIN" ]; then
-  echo "  Open:  http://$DOMAIN   (then: certbot --nginx -d $DOMAIN for HTTPS)"
+  echo "  Open:  http://$DOMAIN   (then: certbot --nginx -d $DOMAIN -d www.$DOMAIN for HTTPS)"
 else
   echo "  Open:  http://$IP:3020"
   echo "  Later: DOMAIN=yourdomain.com bash $REPO_DIR/deploy/deploy.sh  → nginx + certbot"

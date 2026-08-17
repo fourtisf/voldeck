@@ -24,7 +24,7 @@ export default function TopNav() {
     <div className="topnav">
       <div className="brand">
         <div className="logo"><i></i><i></i><i></i></div>
-        <b>VOLDECK</b>
+        <b>VOLREAD</b>
         <span>Chain Volume Terminal</span>
       </div>
       <div className="sp"></div>

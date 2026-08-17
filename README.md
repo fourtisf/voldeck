@@ -1,4 +1,8 @@
-# VOLDECK — Multi-Chain Memecoin Volume Terminal
+# VOLREAD — Multi-Chain Memecoin Volume Terminal
+
+> Brand: **VOLREAD** (volread.com). The repo, internal package names
+> (`@voldeck/*`) and PM2 app names (`voldeck-*`) keep the original working
+> name — renaming those is churn with no user-facing benefit.
 
 Tracks **aggregate memecoin trading volume per chain** (not individual tokens) across
 Solana, Ethereum, BNB Chain and Robinhood Chain. Overview (stats strip, multi-chain

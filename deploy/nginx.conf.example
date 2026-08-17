@@ -3,7 +3,7 @@
 #   sudo certbot --nginx -d <DOMAIN>
 server {
     listen 80;
-    server_name <DOMAIN>;
+    server_name <DOMAIN> www.<DOMAIN>;
 
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
