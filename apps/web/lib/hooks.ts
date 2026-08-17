@@ -3,7 +3,7 @@
 import useSWR from 'swr';
 import type {
   OverviewPayload, SeriesPayload, ChainDetailPayload, AlertsPayload,
-  ChainCode, RangeKey,
+  LaunchpadsPayload, ChainCode, RangeKey,
 } from '@voldeck/shared';
 import { reportFetch } from './conn';
 
@@ -32,6 +32,13 @@ export function useOverview() {
 
 export function useSeries(range: RangeKey) {
   return useSWR<SeriesPayload>(`/api/series?range=${range}`, fetcher, {
+    refreshInterval: 10_000,
+    keepPreviousData: true,
+  });
+}
+
+export function useLaunchpads() {
+  return useSWR<LaunchpadsPayload>('/api/launchpads', fetcher, {
     refreshInterval: 10_000,
     keepPreviousData: true,
   });

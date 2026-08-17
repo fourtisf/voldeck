@@ -2,9 +2,11 @@
 
 Tracks **aggregate memecoin trading volume per chain** (not individual tokens) across
 Solana, Ethereum, BNB Chain and Robinhood Chain. Overview (stats strip, multi-chain
-chart with Lines/Stacked/Bubbles, chains table, hourly heatmap, dominance, rotation,
-flow alerts) plus a per-chain detail page (bar chart + MA, venue breakdown, stats
-grid, heat strip, chain alerts). The UI is a faithful 1:1 port of the approved
+chart with Lines/Stacked/Bubbles, chains table, cross-chain launchpad leaderboard
+(`/api/launchpads` — every venue on every chain ranked by 24h memecoin volume,
+filterable Launchpads/DEX/All), hourly heatmap, dominance, rotation, flow alerts)
+plus a per-chain detail page (bar chart + MA, venue breakdown, stats grid, heat
+strip, chain alerts). The UI is a faithful 1:1 port of the approved
 `voldeck-prototype.html`.
 
 ## Layout

@@ -87,6 +87,7 @@ export async function seedIfEmpty(): Promise<void> {
   if (existing > 0) {
     log.info('sim seed skipped — data exists', { coarseRows: existing });
     await fillGaps();
+    await ensureVenueHistory();
     return;
   }
   const t0 = Date.now();
@@ -117,12 +118,26 @@ export async function seedIfEmpty(): Promise<void> {
     await insertBuckets(rows);
   }
 
-  /* venue history: hourly rows derived from coarse sums */
-  const hourAnchor = Math.floor(Date.now() / 3600_000) * 3600_000;
+  await ensureVenueHistory();
+  log.info('sim seed complete', { ms: Date.now() - t0 });
+}
+
+/**
+ * Backfill hourly VenueVolume rows for any chain-hour in the venue window
+ * that has none, deriving hour volume from coarse buckets. Covers the fresh
+ * seed, downtime gaps, and newly added venues going forward.
+ */
+async function ensureVenueHistory(): Promise<void> {
+  const from = Math.floor(Date.now() / 3600_000) * 3600_000 - SEED_VENUE_DAYS * 24 * 3600_000;
   for (const ch of ORDER) {
-    const from = new Date(hourAnchor - SEED_VENUE_DAYS * 24 * 3600_000);
+    const existing = await prisma.venueVolume.findMany({
+      where: { chain: ch, ts: { gte: new Date(from) } },
+      select: { ts: true },
+      distinct: ['ts'],
+    });
+    const have = new Set(existing.map((r) => r.ts.getTime()));
     const buckets = await prisma.volumeBucket.findMany({
-      where: { chain: ch, tier: 'coarse', bucketTs: { gte: from } },
+      where: { chain: ch, tier: 'coarse', bucketTs: { gte: new Date(from) } },
       select: { bucketTs: true, volumeUsd: true },
     });
     const byHour = new Map<number, number>();
@@ -132,13 +147,14 @@ export async function seedIfEmpty(): Promise<void> {
     }
     const venueRows: { chain: string; venue: string; ts: Date; volumeUsd: number }[] = [];
     for (const [h, hourVol] of byHour) {
-      for (const row of venueSplit(ch, h, hourVol)) venueRows.push(row);
+      if (have.has(h) || hourVol <= 0) continue;
+      venueRows.push(...venueSplit(ch, h, hourVol));
     }
     for (let i = 0; i < venueRows.length; i += 1000) {
       await prisma.venueVolume.createMany({ data: venueRows.slice(i, i + 1000), skipDuplicates: true });
     }
+    if (venueRows.length) log.info('venue history backfilled', { chain: ch, rows: venueRows.length });
   }
-  log.info('sim seed complete', { ms: Date.now() - t0 });
 }
 
 function round2(v: number): number {

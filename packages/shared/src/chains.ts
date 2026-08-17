@@ -28,10 +28,14 @@ export function isChainCode(v: string): v is ChainCode {
   return v === 'SOL' || v === 'ETH' || v === 'BSC' || v === 'RBH';
 }
 
-/** Venue split used by the SIM engine (mirrors the prototype's VENUES table). */
+/**
+ * Venue split used by the SIM engine (extends the prototype's VENUES table
+ * with the smaller launchpads so the cross-chain launchpad board has a
+ * realistic mix).
+ */
 export const SIM_VENUES: Record<ChainCode, [string, number][]> = {
-  SOL: [['Pump.fun / PumpSwap', 0.46], ['Raydium', 0.30], ['Meteora', 0.13], ['Other', 0.11]],
+  SOL: [['Pump.fun / PumpSwap', 0.40], ['Raydium', 0.26], ['Meteora', 0.12], ['LetsBonk', 0.09], ['Moonshot', 0.04], ['Other', 0.09]],
   ETH: [['Uniswap', 0.78], ['SushiSwap', 0.07], ['Other', 0.15]],
-  BSC: [['PancakeSwap', 0.55], ['Four.meme', 0.28], ['Other', 0.17]],
+  BSC: [['PancakeSwap', 0.50], ['Four.meme', 0.30], ['Flap', 0.07], ['Other', 0.13]],
   RBH: [['Robinfun', 0.82], ['RobinSwap', 0.18]],
 };

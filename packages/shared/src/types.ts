@@ -109,6 +109,20 @@ export interface ChainDetailPayload {
   mode: DataMode;
 }
 
+export interface LaunchpadRow {
+  venue: string;
+  chain: ChainCode;
+  kind: 'launchpad' | 'dex';
+  volumeUsd: number;
+}
+
+export interface LaunchpadsPayload {
+  /** all venues across all chains, last 24h, sorted by volume desc */
+  rows: LaunchpadRow[];
+  totalUsd: number;
+  mode: DataMode;
+}
+
 export type AlertType = 'surge' | 'fade' | 'rotation';
 
 export interface AlertRow {

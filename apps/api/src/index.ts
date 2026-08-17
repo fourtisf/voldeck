@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { isChainCode, isRangeKey, ORDER, type ChainCode } from '@voldeck/shared';
 import { API_PORT, WEB_ORIGIN, DATA_MODE } from './env';
 import { cached } from './cache';
-import { buildOverview, buildSeries, buildChainDetail, buildAlerts } from './data';
+import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads } from './data';
 
 const app = Fastify({ logger: true });
 
@@ -17,6 +17,10 @@ async function main(): Promise<void> {
 
   app.get('/api/overview', async () =>
     cached('voldeck:api:overview', 10, buildOverview)
+  );
+
+  app.get('/api/launchpads', async () =>
+    cached('voldeck:api:launchpads', 15, buildLaunchpads)
   );
 
   app.get<{ Querystring: { range?: string; chains?: string } }>('/api/series', async (req, reply) => {

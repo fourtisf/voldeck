@@ -8,9 +8,10 @@
 import { getPrisma } from '@voldeck/db';
 import {
   CHAINS, ORDER, RANGES, type ChainCode, type RangeKey, type Tier,
-  FINE_MS, COARSE_MS, tierMs, tierAnchor,
+  FINE_MS, COARSE_MS, tierMs, tierAnchor, classifyVenue, isChainCode,
   type OverviewPayload, type OverviewChainRow, type SeriesPayload,
   type ChainDetailPayload, type AlertRow, type AlertType, type VenueRow,
+  type LaunchpadsPayload, type LaunchpadRow,
 } from '@voldeck/shared';
 import { getRedis } from './cache';
 import { DATA_MODE } from './env';
@@ -256,6 +257,34 @@ export async function buildChainDetail(code: ChainCode): Promise<ChainDetailPayl
     heat,
     heatAnchorTs,
     surging: surging.has(code),
+    mode: DATA_MODE,
+  };
+}
+
+/**
+ * Cross-chain venue leaderboard: every venue on every chain, last 24h,
+ * classified launchpad vs DEX, sorted by volume desc. "Which launchpad has
+ * the most memecoin volume" — across all chains, not per chain.
+ */
+export async function buildLaunchpads(): Promise<LaunchpadsPayload> {
+  const grouped = await prisma.venueVolume.groupBy({
+    by: ['chain', 'venue'],
+    where: { ts: { gte: new Date(Date.now() - 24 * 3600_000) } },
+    _sum: { volumeUsd: true },
+  });
+  const rows: LaunchpadRow[] = grouped
+    .filter((g) => isChainCode(g.chain))
+    .map((g) => ({
+      venue: g.venue,
+      chain: g.chain as ChainCode,
+      kind: classifyVenue(g.venue),
+      volumeUsd: Number(g._sum.volumeUsd ?? 0),
+    }))
+    .filter((r) => r.volumeUsd > 0)
+    .sort((a, b) => b.volumeUsd - a.volumeUsd);
+  return {
+    rows,
+    totalUsd: rows.reduce((s, r) => s + r.volumeUsd, 0),
     mode: DATA_MODE,
   };
 }
