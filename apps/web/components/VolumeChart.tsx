@@ -14,10 +14,14 @@ import {
   fmtUsd, fmtPct, tint, niceCeil, clamp, type SeriesPayload,
 } from '@voldeck/shared';
 import { useSeries } from '@/lib/hooks';
+import { useQueryState } from '@/lib/useQueryState';
 import { bTime, xLabel, tipTime } from '@/lib/chartTime';
 
 type View = 'lines' | 'stack' | 'bubble';
 type Mode = 'usd' | 'pct';
+
+const VIEWS: View[] = ['lines', 'stack', 'bubble'];
+const MODES: Mode[] = ['usd', 'pct'];
 
 interface Bub {
   x: number; y: number; vx: number; vy: number; r: number;
@@ -49,9 +53,9 @@ function indexed(arr: (number | null)[]): (number | null)[] {
 
 export default function VolumeChart() {
   const router = useRouter();
-  const [range, setRange] = useState<RangeKey>('24h');
-  const [view, setView] = useState<View>('lines');
-  const [mode, setMode] = useState<Mode>('usd');
+  const [range, setRange] = useQueryState<RangeKey>('range', '24h', RANGE_KEYS);
+  const [view, setView] = useQueryState<View>('view', 'lines', VIEWS);
+  const [mode, setMode] = useQueryState<Mode>('mode', 'usd', MODES);
   const [visArr, setVisArr] = useState<ChainCode[]>([...ORDER]);
   const { data } = useSeries(range);
 
@@ -425,7 +429,7 @@ export default function VolumeChart() {
           <button className={mode === 'pct' ? 'on' : ''} onClick={() => setMode('pct')}>%</button>
         </div>
         <div className="seg">
-          {(['lines', 'stack', 'bubble'] as View[]).map((v) => (
+          {VIEWS.map((v) => (
             <button key={v} className={view === v ? 'on' : ''} onClick={() => {
               setView(v);
               const st = S.current;

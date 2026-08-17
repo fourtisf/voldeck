@@ -7,10 +7,10 @@
  * switches Launchpads / DEX / All venues. Percentages are the venue's share
  * of that chain's total venue volume; rows click through to chain detail.
  */
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CHAINS, ORDER, fmtUsd, type ChainCode, type VenueKind, type LaunchpadRow } from '@voldeck/shared';
 import { useLaunchpads } from '@/lib/hooks';
+import { useQueryState } from '@/lib/useQueryState';
 
 type KindFilter = 'all' | VenueKind;
 type ChainFilter = 'all' | ChainCode;
@@ -20,11 +20,13 @@ const KIND_FILTERS: { key: KindFilter; label: string }[] = [
   { key: 'dex', label: 'DEX' },
   { key: 'all', label: 'All' },
 ];
+const CHAIN_FILTERS: ChainFilter[] = ['all', ...ORDER];
+const KIND_KEYS: KindFilter[] = ['launchpad', 'dex', 'all'];
 
 export default function Launchpads() {
   const router = useRouter();
-  const [kind, setKind] = useState<KindFilter>('launchpad');
-  const [chain, setChain] = useState<ChainFilter>('all');
+  const [kind, setKind] = useQueryState<KindFilter>('lpk', 'launchpad', KIND_KEYS);
+  const [chain, setChain] = useQueryState<ChainFilter>('lp', 'all', CHAIN_FILTERS);
   const { data } = useLaunchpads();
 
   const all = data?.rows ?? [];

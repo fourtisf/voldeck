@@ -12,6 +12,7 @@ import {
   type OverviewPayload, type OverviewChainRow, type SeriesPayload,
   type ChainDetailPayload, type AlertRow, type AlertType, type VenueRow,
   type LaunchpadsPayload, type LaunchpadRow,
+  type LaunchpadSeriesPayload, type LaunchpadSeriesVenue, type LpRangeKey,
 } from '@voldeck/shared';
 import { getRedis } from './cache';
 import { DATA_MODE } from './env';
@@ -285,6 +286,75 @@ export async function buildLaunchpads(): Promise<LaunchpadsPayload> {
   return {
     rows,
     totalUsd: rows.reduce((s, r) => s + r.volumeUsd, 0),
+    mode: DATA_MODE,
+  };
+}
+
+/**
+ * Launchpad-wars series: per-bucket share of a chain's LAUNCHPAD volume for
+ * its top launchpads, from hourly VenueVolume rows. 24h = 24×1h buckets,
+ * 7d = 42×4h buckets.
+ */
+export async function buildLaunchpadSeries(chain: ChainCode, range: LpRangeKey): Promise<LaunchpadSeriesPayload> {
+  const HOUR = 3600_000;
+  const cfg = range === '24h' ? { hours: 24, agg: 1 } : { hours: 168, agg: 4 };
+  const anchorHour = Math.floor(Date.now() / HOUR) * HOUR;
+  const from = anchorHour - (cfg.hours - 1) * HOUR;
+
+  const rows = await prisma.venueVolume.findMany({
+    where: { chain, ts: { gte: new Date(from) } },
+    select: { venue: true, ts: true, volumeUsd: true },
+  });
+
+  /* hourly volume per launchpad venue */
+  const byVenue = new Map<string, (number | null)[]>();
+  for (const r of rows) {
+    if (classifyVenue(r.venue) !== 'launchpad') continue;
+    const idx = Math.round((r.ts.getTime() - from) / HOUR);
+    if (idx < 0 || idx >= cfg.hours) continue;
+    if (!byVenue.has(r.venue)) byVenue.set(r.venue, new Array(cfg.hours).fill(null));
+    const arr = byVenue.get(r.venue)!;
+    arr[idx] = (arr[idx] ?? 0) + Number(r.volumeUsd);
+  }
+
+  const totals = [...byVenue.entries()]
+    .map(([name, arr]) => ({ name, total: arr.reduce((s: number, v) => s + (v ?? 0), 0) }))
+    .sort((a, b) => b.total - a.total);
+  const top = totals.slice(0, 6);
+
+  const n = cfg.hours / cfg.agg;
+  /* aggregate to chart buckets, then convert to share of the launchpad total */
+  const groupVol = new Map<string, (number | null)[]>();
+  for (const { name } of top) {
+    const src = byVenue.get(name)!;
+    const out: (number | null)[] = new Array(n).fill(null);
+    for (let i = 0; i < n; i++) {
+      let s = 0, seen = false;
+      for (let j = 0; j < cfg.agg; j++) {
+        const v = src[i * cfg.agg + j];
+        if (v !== null) { s += v; seen = true; }
+      }
+      out[i] = seen ? s : null;
+    }
+    groupVol.set(name, out);
+  }
+  const groupTotal: number[] = new Array(n).fill(0);
+  for (const arr of groupVol.values()) for (let i = 0; i < n; i++) groupTotal[i] += arr[i] ?? 0;
+
+  const venues: LaunchpadSeriesVenue[] = top.map(({ name, total }) => ({
+    name,
+    totalUsd: total,
+    shares: groupVol.get(name)!.map((v, i) =>
+      v === null || groupTotal[i] <= 0 ? null : (v / groupTotal[i]) * 100
+    ),
+  }));
+
+  return {
+    chain,
+    range,
+    bucketMs: HOUR * cfg.agg,
+    anchorTs: anchorHour - (cfg.agg - 1) * HOUR,
+    venues,
     mode: DATA_MODE,
   };
 }

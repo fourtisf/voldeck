@@ -123,6 +123,27 @@ export interface LaunchpadsPayload {
   mode: DataMode;
 }
 
+/** Launchpad-wars chart ranges (hourly VenueVolume resolution). */
+export type LpRangeKey = '24h' | '7d';
+
+export interface LaunchpadSeriesVenue {
+  name: string;
+  totalUsd: number;
+  /** share (%) of the chain's launchpad volume per bucket, oldest first; null = gap */
+  shares: (number | null)[];
+}
+
+export interface LaunchpadSeriesPayload {
+  chain: ChainCode;
+  range: LpRangeKey;
+  bucketMs: number;
+  /** bucket start ts (ms) of the last point */
+  anchorTs: number;
+  /** top launchpads by window volume, descending */
+  venues: LaunchpadSeriesVenue[];
+  mode: DataMode;
+}
+
 export type AlertType = 'surge' | 'fade' | 'rotation';
 
 export interface AlertRow {

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CHAINS, RANGES, RANGE_KEYS, type ChainCode, type RangeKey,
   fmtUsd, fmtCnt, fmtPct, fmtPp, pctCls,
 } from '@voldeck/shared';
 import { useChainDetail, useChainSeries, useAlerts } from '@/lib/hooks';
+import { useQueryState } from '@/lib/useQueryState';
 import { utcClock } from '@/lib/chartTime';
 import FlashNum from './FlashNum';
 import DetailBars from './DetailBars';
@@ -17,7 +18,7 @@ const p2 = (n: number) => String(n).padStart(2, '0');
 
 export default function DetailScreen({ code }: { code: ChainCode }) {
   const router = useRouter();
-  const [range, setRange] = useState<RangeKey>('24h');
+  const [range, setRange] = useQueryState<RangeKey>('range', '24h', RANGE_KEYS);
   const { data: d } = useChainDetail(code);
   const { data: series } = useChainSeries(code, range);
   const { data: al } = useAlerts(code);

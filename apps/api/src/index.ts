@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { isChainCode, isRangeKey, ORDER, type ChainCode } from '@voldeck/shared';
 import { API_PORT, WEB_ORIGIN, DATA_MODE } from './env';
 import { cached } from './cache';
-import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads } from './data';
+import { buildOverview, buildSeries, buildChainDetail, buildAlerts, buildLaunchpads, buildLaunchpadSeries } from './data';
 
 const app = Fastify({ logger: true });
 
@@ -22,6 +22,13 @@ async function main(): Promise<void> {
   app.get('/api/launchpads', async () =>
     cached('voldeck:api:launchpads', 15, buildLaunchpads)
   );
+
+  app.get<{ Querystring: { chain?: string; range?: string } }>('/api/launchpads/series', async (req, reply) => {
+    const chain = (req.query.chain ?? 'SOL').toUpperCase();
+    if (!isChainCode(chain)) return reply.code(400).send({ error: 'bad chain' });
+    const range = req.query.range === '7d' ? '7d' : '24h';
+    return cached(`voldeck:api:lpseries:${chain}:${range}`, 30, () => buildLaunchpadSeries(chain, range));
+  });
 
   app.get<{ Querystring: { range?: string; chains?: string } }>('/api/series', async (req, reply) => {
     const range = req.query.range ?? '24h';
