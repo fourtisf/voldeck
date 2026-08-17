@@ -99,9 +99,10 @@ export async function seedLaunchpadTokens(): Promise<void> {
         }
         if (used.has(pick[1])) continue;
         used.add(pick[1]);
-        /* rank 0 is the venue's current hype leader */
-        const scale = Math.pow(0.45, i) * rnd(0.6, 1.4);
-        const mc = clamp(venueDayVol * 0.35 * scale, 150_000, 900e6);
+        /* rank 0 is the venue's current hype leader; gentle decay so deep
+           rosters still spread instead of piling on the floor */
+        const scale = Math.pow(0.62, i) * rnd(0.6, 1.4);
+        const mc = clamp(venueDayVol * 0.35 * scale, rnd(60_000, 220_000), 900e6);
         const ath = mc * rnd(1.15, 6);
         const start = rnd(4_000, 12_000);
         const vol24 = mc * rnd(0.08, 0.7);
