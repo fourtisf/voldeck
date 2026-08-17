@@ -79,6 +79,22 @@ pnpm --filter @voldeck/web dev      # :3020 (proxies /api → :4020)
 
 ## Deployment (Hostinger VPS)
 
+**One-shot (as root on the VPS):**
+
+```bash
+git clone https://github.com/fourtisf/voldeck.git /opt/voldeck
+bash /opt/voldeck/deploy/deploy.sh
+```
+
+`deploy/deploy.sh` is idempotent: installs Node 20/pnpm/pm2/Postgres/Redis if
+missing, creates the DB, writes `.env` (SIM mode), builds, migrates, starts the
+three PM2 apps (other PM2 apps untouched), and health-checks. Without a domain
+the site is served at `http://<ip>:3020`; re-run with `DOMAIN=yourdomain.com`
+to add nginx, then run the printed certbot command for SSL. Re-running the
+script later pulls the latest commit and reloads.
+
+**Manual steps (equivalent):**
+
 1. Node 20 LTS + pnpm; PostgreSQL + Redis (existing instances fine — create DB `voldeck`)
 2. `pnpm install && pnpm build`, then `pnpm --filter @voldeck/db migrate:deploy`
 3. Repo-root `.env` from `.env.example` (worker/api read it; keep `DATA_MODE=sim`)
