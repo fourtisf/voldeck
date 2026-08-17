@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  CHAINS, ORDER, DAYS, type ChainCode, type LpRangeKey,
+  CHAINS, ORDER, DAYS, MONTHS, type ChainCode, type LpRangeKey,
   niceCeil, type LaunchpadSeriesPayload,
 } from '@voldeck/shared';
 import { useLaunchpadSeries } from '@/lib/hooks';
@@ -27,7 +27,16 @@ function lpColor(name: string): string {
 }
 
 const p2 = (n: number) => String(n).padStart(2, '0');
-const LP_RANGES: LpRangeKey[] = ['24h', '7d'];
+const LP_RANGES: LpRangeKey[] = ['24h', '7d', '30d'];
+/* points per range: 24, 42, 60 — label every Nth point */
+const LP_STEP: Record<LpRangeKey, number> = { '24h': 4, '7d': 6, '30d': 8 };
+
+function lpXLabel(range: LpRangeKey, ts: number): string {
+  const d = new Date(ts);
+  if (range === '24h') return p2(d.getUTCHours()) + ':00';
+  if (range === '7d') return DAYS[d.getUTCDay()] + ' ' + d.getUTCDate();
+  return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()];
+}
 
 export default function LaunchpadWars() {
   const [chain, setChain] = useQueryState<ChainCode>('wc', 'SOL', ORDER);
@@ -57,7 +66,7 @@ export default function LaunchpadWars() {
     const padL = 44, padR = 10, padT = 10, padB = 24;
     const iw = w - padL - padR, ih = h - padT - padB;
     const venues = (st.data?.venues ?? []).filter((v) => !st.hidden.has(v.name));
-    const n = venues[0]?.shares.length ?? (st.range === '24h' ? 24 : 42);
+    const n = venues[0]?.shares.length ?? (st.range === '24h' ? 24 : st.range === '7d' ? 42 : 60);
 
     let mx = 0;
     for (const v of venues) for (const s of v.shares) if (s !== null && s > mx) mx = s;
@@ -76,14 +85,11 @@ export default function LaunchpadWars() {
     }
     const anchorTs = st.data?.anchorTs ?? Date.now();
     const bucketMs = st.data?.bucketMs ?? 3600_000;
-    const step = st.range === '24h' ? 4 : 6;
+    const step = LP_STEP[st.range];
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let i = 0; i < n; i += step) {
-      const d = new Date(bTime(anchorTs, bucketMs, n, i));
-      const lbl = st.range === '24h'
-        ? p2(d.getUTCHours()) + ':00'
-        : DAYS[d.getUTCDay()] + ' ' + d.getUTCDate();
-      ctx.fillStyle = '#565e6b'; ctx.fillText(lbl, X(i), padT + ih + 8);
+      ctx.fillStyle = '#565e6b';
+      ctx.fillText(lpXLabel(st.range, bTime(anchorTs, bucketMs, n, i)), X(i), padT + ih + 8);
     }
     for (const v of venues) {
       const col = lpColor(v.name);

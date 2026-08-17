@@ -26,7 +26,8 @@ async function main(): Promise<void> {
   app.get<{ Querystring: { chain?: string; range?: string } }>('/api/launchpads/series', async (req, reply) => {
     const chain = (req.query.chain ?? 'SOL').toUpperCase();
     if (!isChainCode(chain)) return reply.code(400).send({ error: 'bad chain' });
-    const range = req.query.range === '7d' ? '7d' : '24h';
+    const rangeRaw = req.query.range ?? '24h';
+    const range = rangeRaw === '7d' || rangeRaw === '30d' ? rangeRaw : '24h';
     return cached(`voldeck:api:lpseries:${chain}:${range}`, 30, () => buildLaunchpadSeries(chain, range));
   });
 

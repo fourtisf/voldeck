@@ -40,7 +40,7 @@ export function isSpiking(ch: ChainCode, now = Date.now()): boolean {
 
 const SEED_COARSE_DAYS = 30;
 const SEED_FINE_DAYS = 14;
-const SEED_VENUE_DAYS = 7;
+const SEED_VENUE_DAYS = 30; // covers the launchpad-wars 30D range
 const TICK_MS = 5_000;
 
 /** Deterministic pseudo-noise in [0,1) from a string key — keeps per-hour venue splits stable across recomputes. */

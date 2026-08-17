@@ -124,7 +124,7 @@ export interface LaunchpadsPayload {
 }
 
 /** Launchpad-wars chart ranges (hourly VenueVolume resolution). */
-export type LpRangeKey = '24h' | '7d';
+export type LpRangeKey = '24h' | '7d' | '30d';
 
 export interface LaunchpadSeriesVenue {
   name: string;

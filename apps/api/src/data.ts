@@ -293,11 +293,17 @@ export async function buildLaunchpads(): Promise<LaunchpadsPayload> {
 /**
  * Launchpad-wars series: per-bucket share of a chain's LAUNCHPAD volume for
  * its top launchpads, from hourly VenueVolume rows. 24h = 24×1h buckets,
- * 7d = 42×4h buckets.
+ * 7d = 42×4h buckets, 30d = 60×12h buckets.
  */
+const LP_SERIES_CFG: Record<LpRangeKey, { hours: number; agg: number }> = {
+  '24h': { hours: 24, agg: 1 },
+  '7d': { hours: 168, agg: 4 },
+  '30d': { hours: 720, agg: 12 },
+};
+
 export async function buildLaunchpadSeries(chain: ChainCode, range: LpRangeKey): Promise<LaunchpadSeriesPayload> {
   const HOUR = 3600_000;
-  const cfg = range === '24h' ? { hours: 24, agg: 1 } : { hours: 168, agg: 4 };
+  const cfg = LP_SERIES_CFG[range];
   const anchorHour = Math.floor(Date.now() / HOUR) * HOUR;
   const from = anchorHour - (cfg.hours - 1) * HOUR;
 
