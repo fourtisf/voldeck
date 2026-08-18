@@ -7,6 +7,7 @@
  */
 import { getPrisma } from '@voldeck/db';
 import { isDenylisted, type ChainCode } from '@voldeck/shared';
+import { RBH_DS_CHAIN } from './env';
 import { fetchJson } from './gecko';
 import {
   writeFineBucket, incrementVenueHour, upsertLaunchpadTokens, cacheTxns24,
@@ -17,7 +18,10 @@ import { log } from './log';
 const prisma = getPrisma();
 
 const DS_BASE = 'https://api.dexscreener.com';
-const DS_CHAIN: Partial<Record<ChainCode, string>> = { SOL: 'solana', ETH: 'ethereum', BSC: 'bsc' };
+const DS_CHAIN: Partial<Record<ChainCode, string>> = {
+  SOL: 'solana', ETH: 'ethereum', BSC: 'bsc',
+  ...(RBH_DS_CHAIN ? { RBH: RBH_DS_CHAIN } : {}),
+};
 const BATCH = 30;
 const MAX_POOLS = 180;
 /** below this fraction of answered pools the data is too thin — fall back */

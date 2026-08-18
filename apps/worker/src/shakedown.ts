@@ -41,7 +41,33 @@ async function main(): Promise<void> {
     const s = pairs[0];
     console.log(`  sample: ${s.baseToken?.symbol} dexId=${s.dexId} mc=${s.marketCap ?? s.fdv} chg24=${s.priceChange?.h24} created=${s.pairCreatedAt ? new Date(s.pairCreatedAt).toISOString().slice(0, 10) : '?'}`);
   }
-  console.log('\nShakedown done — both sources parse. If a section says NO DATA, send this output back.');
+  /* --- Robinhood Chain availability probe --------------------------------- */
+  console.log('\n=== ROBINHOOD CHAIN PROBE ===');
+  const geckoHits: string[] = [];
+  for (let p = 1; p <= 12; p++) {
+    const page = await fetchJson<any>(`${GECKO}/networks?page=${p}`);
+    const nets = page?.data ?? [];
+    if (!nets.length) break;
+    for (const n of nets) {
+      const name = String(n.attributes?.name ?? '');
+      if (/robin/i.test(name) || /robin/i.test(String(n.id))) geckoHits.push(`${n.id} (${name})`);
+    }
+  }
+  console.log(geckoHits.length
+    ? `GECKO indexes Robinhood: ${geckoHits.join(', ')}\n  → add to /opt/voldeck/.env:  RBH_GECKO_NETWORK=${geckoHits[0].split(' ')[0]}`
+    : 'GECKO: Robinhood Chain not indexed yet');
+  const dsSearch = await fetchJson<any>(`https://api.dexscreener.com/latest/dex/search?q=robinhood`);
+  const dsChains = [...new Set(((dsSearch?.pairs ?? []) as any[]).map((p) => String(p.chainId)).filter((c) => /robin/i.test(c)))];
+  console.log(dsChains.length
+    ? `DEXSCREENER indexes Robinhood: chainId ${dsChains.join(', ')}\n  → add to /opt/voldeck/.env:  RBH_DS_CHAIN=${dsChains[0]}`
+    : 'DEXSCREENER: no robinhood chainId found via search');
+  if (geckoHits.length) {
+    console.log('After adding the .env line(s):  pm2 restart volread-worker  → RBH flows like the other chains.');
+  } else {
+    console.log('RBH stays empty until either an aggregator indexes Robinhood Chain or ROBINFUN_DATABASE_URL is provided.');
+  }
+
+  console.log('\nShakedown done — send this whole output back if anything says NO DATA.');
 }
 
 main().catch((e) => { console.error('shakedown failed:', e); process.exit(1); });

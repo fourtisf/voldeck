@@ -6,8 +6,8 @@
  * refresh fails. Budget worst case stays far under the rate limit.
  */
 import { getPrisma } from '@voldeck/db';
-import { CHAINS, isDenylisted, type ChainCode } from '@voldeck/shared';
-import { GECKO_BASE } from './env';
+import { isDenylisted, type ChainCode } from '@voldeck/shared';
+import { GECKO_BASE, geckoNetworkFor } from './env';
 import {
   writeFineBucket, incrementVenueHour, upsertLaunchpadTokens, cacheTxns24,
   round2, type LiveTokenAgg,
@@ -75,7 +75,7 @@ const afterUnderscore = (id: string) => id.slice(id.indexOf('_') + 1);
 
 /** Full GeckoTerminal ingest for one chain tick. Also refreshes TrackedPool. */
 export async function ingestChainGecko(ch: ChainCode): Promise<boolean> {
-  const net = CHAINS[ch].geckoNetwork;
+  const net = geckoNetworkFor(ch);
   if (!net) return false;
   const t0 = Date.now();
   let calls = 0, volM5 = 0, txM5 = 0, tx24 = 0, pools = 0, dropped = 0;

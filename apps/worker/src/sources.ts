@@ -13,7 +13,8 @@
  * site refreshes just as often, and either source can carry a full outage
  * of the other.
  */
-import { CHAINS, ORDER } from '@voldeck/shared';
+import { ORDER } from '@voldeck/shared';
+import { geckoNetworkFor } from './env';
 import { ingestChainGecko } from './gecko';
 import { refreshChainDexScreener } from './dexscreener';
 import { log } from './log';
@@ -21,7 +22,7 @@ import { log } from './log';
 const DISCOVERY_EVERY = 6; // ticks
 
 export function startIngest(): void {
-  const chains = ORDER.filter((c) => CHAINS[c].geckoNetwork);
+  const chains = ORDER.filter((c) => geckoNetworkFor(c));
   const ticks: Record<string, number> = {};
 
   const runTick = async (ch: (typeof chains)[number]) => {
