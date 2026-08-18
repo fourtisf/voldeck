@@ -46,7 +46,7 @@ async function fetchSlots(
 }
 
 /** Sum `agg` consecutive slots per chart point; a point is null only if every member is missing. */
-function aggregateSlots(arr: (number | null)[], agg: number): (number | null)[] {
+export function aggregateSlots(arr: (number | null)[], agg: number): (number | null)[] {
   if (agg === 1) return arr;
   const n = Math.floor(arr.length / agg);
   const out: (number | null)[] = new Array(n);
@@ -62,7 +62,7 @@ function aggregateSlots(arr: (number | null)[], agg: number): (number | null)[] 
 }
 
 /** Sum of the trailing `len` slots at `offsetFromEnd` (0 = window ending at anchor). Nulls count as 0. */
-function sumTail(arr: (number | null)[], len: number, offsetFromEnd = 0): number {
+export function sumTail(arr: (number | null)[], len: number, offsetFromEnd = 0): number {
   let s = 0;
   const end = arr.length - offsetFromEnd;
   for (let i = Math.max(0, end - len); i < end; i++) s += arr[i] ?? 0;
@@ -82,8 +82,17 @@ interface ChainMetrics {
   d1: number; d6: number; d24: number;
   share: number; sharePrev: number; rot: number;
   tx: number;
-  coarse48h: (number | null)[];
+  /** 96 × 15m points (24h), derived from fine buckets */
+  spark15m: (number | null)[];
+  /** 288 × 5m slots (24h) — used for hour-aligned heat */
+  fine24h: (number | null)[];
 }
+
+/** 5m slots per window — every headline number is a tail of the SAME array. */
+const SLOTS_1H = 12;
+const SLOTS_6H = 72;
+const SLOTS_24H = 288;
+const SLOTS_48H = 576;
 
 /**
  * Transactions over the SAME window we measured volume in — summed from our
@@ -94,7 +103,8 @@ interface ChainMetrics {
 async function txnsByChain(fromTs: number): Promise<Partial<Record<ChainCode, number>>> {
   const rows = await prisma.volumeBucket.groupBy({
     by: ['chain'],
-    where: { tier: 'coarse', bucketTs: { gte: new Date(fromTs) } },
+    // fine, like the volume windows — coarse lags behind the rollup job
+    where: { tier: 'fine', bucketTs: { gte: new Date(fromTs) } },
     _sum: { txns: true },
   });
   const out: Partial<Record<ChainCode, number>> = {};
@@ -114,31 +124,43 @@ async function pairsByChain(): Promise<Partial<Record<ChainCode, number>>> {
   return out;
 }
 
-async function computeMetrics(): Promise<{ M: Record<ChainCode, ChainMetrics>; T: { v1: number; v6: number; v24: number; p24: number; d24: number; tx: number } }> {
-  const coarseAnchor = tierAnchor('coarse');
+/**
+ * All headline windows come from ONE tier (fine, 5m) over 48h.
+ *
+ * They used to be mixed: 24h from coarse, 1h/6h from fine. Coarse is built
+ * by a rollup job that lags the newest fine buckets, so Vol 1H could exceed
+ * Vol 24H — impossible, since 1H is contained in 24H. Nested tails of the
+ * same array make that arithmetically unrepresentable. Fine retention is 14
+ * days, so 48h fits comfortably.
+ */
+async function computeMetrics(): Promise<{
+  M: Record<ChainCode, ChainMetrics>;
+  T: { v1: number; v6: number; v24: number; p24: number; d24: number; tx: number };
+  fineAnchor: number;
+}> {
   const fineAnchor = tierAnchor('fine');
-  const coarse = await fetchSlots(ORDER, 'coarse', 192, coarseAnchor); // 48h
-  const fine = await fetchSlots(ORDER, 'fine', 144, fineAnchor);       // 12h
-
-  const txns = await txnsByChain(coarseAnchor - 96 * COARSE_MS);
+  const fine = await fetchSlots(ORDER, 'fine', SLOTS_48H, fineAnchor);
+  const txns = await txnsByChain(fineAnchor - (SLOTS_24H - 1) * FINE_MS);
 
   const M = {} as Record<ChainCode, ChainMetrics>;
   const T = { v1: 0, v6: 0, v24: 0, p24: 0, d24: 0, tx: 0 };
   for (const ch of ORDER) {
-    const c = coarse[ch], f = fine[ch];
-    const v24 = sumTail(c, 96), p24 = sumTail(c, 96, 96);
-    const v6 = sumTail(f, 72), p6 = sumTail(f, 72, 72);
-    const v1 = sumTail(f, 12), p1 = sumTail(f, 12, 12);
+    const f = fine[ch];
+    const v24 = sumTail(f, SLOTS_24H), p24 = sumTail(f, SLOTS_24H, SLOTS_24H);
+    const v6 = sumTail(f, SLOTS_6H), p6 = sumTail(f, SLOTS_6H, SLOTS_6H);
+    const v1 = sumTail(f, SLOTS_1H), p1 = sumTail(f, SLOTS_1H, SLOTS_1H);
     // last completed fine bucket (the anchor bucket is still accumulating)
     const v5 = f[f.length - 2] ?? f[f.length - 1] ?? 0;
     const tx = txns[ch] ?? 0;
+    const fine24h = f.slice(-SLOTS_24H);
     M[ch] = {
       v5, v1, v6, v24, p24,
       d1: p1 > 0 ? ((v1 - p1) / p1) * 100 : 0,
       d6: p6 > 0 ? ((v6 - p6) / p6) * 100 : 0,
       d24: p24 > 0 ? ((v24 - p24) / p24) * 100 : 0,
       share: 0, sharePrev: 0, rot: 0, tx,
-      coarse48h: c,
+      spark15m: aggregateSlots(fine24h, 3),
+      fine24h,
     };
     T.v1 += v1; T.v6 += v6; T.v24 += v24; T.p24 += p24; T.tx += tx;
   }
@@ -148,7 +170,7 @@ async function computeMetrics(): Promise<{ M: Record<ChainCode, ChainMetrics>; T
     M[ch].rot = M[ch].share - M[ch].sharePrev;
   }
   T.d24 = T.p24 > 0 ? ((T.v24 - T.p24) / T.p24) * 100 : 0;
-  return { M, T };
+  return { M, T, fineAnchor };
 }
 
 /** Chains with a surge alert in the last 30 minutes (drives the SURGE pill). */
@@ -164,11 +186,12 @@ async function surgingSet(): Promise<Set<ChainCode>> {
 /* ---------- endpoints ---------- */
 
 export async function buildOverview(): Promise<OverviewPayload> {
-  const { M, T } = await computeMetrics();
+  const { M, T, fineAnchor } = await computeMetrics();
   const surging = await surgingSet();
   const pairs = await pairsByChain();
-  const coarseAnchor = tierAnchor('coarse');
   const trackedTotal = ORDER.reduce((s, c) => s + (pairs[c] ?? 0), 0);
+  // last 15m spark point covers the final 3 fine slots
+  const sparkAnchorTs = fineAnchor - 2 * FINE_MS;
 
   const chains: OverviewChainRow[] = ORDER.map((ch) => ({
     chain: ch,
@@ -176,7 +199,7 @@ export async function buildOverview(): Promise<OverviewPayload> {
     vol1h: M[ch].v1, vol24: M[ch].v24,
     share: M[ch].share, txns: M[ch].tx,
     surging: surging.has(ch),
-    spark: M[ch].coarse48h.slice(96),
+    spark: M[ch].spark15m,
   }));
 
   const leader = ORDER.reduce((a, b) => (M[a].share >= M[b].share ? a : b));
@@ -195,7 +218,7 @@ export async function buildOverview(): Promise<OverviewPayload> {
     rotation: [...ORDER]
       .sort((a, b) => M[b].rot - M[a].rot)
       .map((ch) => ({ chain: ch, share: M[ch].share, sharePrev: M[ch].sharePrev, rot: M[ch].rot })),
-    anchorTs: coarseAnchor,
+    anchorTs: sparkAnchorTs,
     bucketMs: COARSE_MS,
     mode: DATA_MODE,
   };
@@ -235,21 +258,23 @@ export async function buildSeries(range: RangeKey, chains: ChainCode[]): Promise
 }
 
 export async function buildChainDetail(code: ChainCode): Promise<ChainDetailPayload> {
-  const { M } = await computeMetrics();
+  const { M, fineAnchor } = await computeMetrics();
   const m = M[code];
   const surging = await surgingSet();
-  const coarseAnchor = tierAnchor('coarse');
 
-  /* hourly heat: 24 groups of 4 coarse slots over the last 24h (prototype's hourlyAgg) */
-  const spark = m.coarse48h.slice(96); // 96 slots, ends at anchor
-  const heat: number[] = [];
-  for (let i = 0; i < 24; i++) {
-    heat.push((spark[i * 4] ?? 0) + (spark[i * 4 + 1] ?? 0) + (spark[i * 4 + 2] ?? 0) + (spark[i * 4 + 3] ?? 0));
-  }
-  const heatAnchorTs = coarseAnchor - 95 * COARSE_MS;
+  /* hourly heat: the last 24 UTC hours, each 5m slot placed by its real
+     timestamp — the "Peak hour" stat is a labelled clock hour, so the cells
+     have to line up with actual hour boundaries, not with slot positions */
+  const heatAnchorTs = Math.floor(Date.now() / 3600_000) * 3600_000 - 23 * 3600_000;
+  const fineStartTs = fineAnchor - (SLOTS_24H - 1) * FINE_MS;
+  const heat: number[] = new Array(24).fill(0);
+  m.fine24h.forEach((v, i) => {
+    const idx = Math.floor((fineStartTs + i * FINE_MS - heatAnchorTs) / 3600_000);
+    if (idx >= 0 && idx < 24) heat[idx] += v ?? 0;
+  });
   let pk = 0;
   for (let i = 1; i < 24; i++) if (heat[i] > heat[pk]) pk = i;
-  const peakTs = new Date(heatAnchorTs + pk * 4 * COARSE_MS);
+  const peakTs = new Date(heatAnchorTs + pk * 3600_000);
 
   /* venues: last 24h of VenueVolume */
   const venueRows = await prisma.venueVolume.groupBy({
