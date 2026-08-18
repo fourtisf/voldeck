@@ -52,6 +52,67 @@ function socialUrl(pair: DsPair, type: string): string | null {
   return hit?.url ?? null;
 }
 
+const DEX_PRETTY: Record<string, string> = {
+  robinfun: 'Robinfun', robinswap: 'RobinSwap',
+  pancakeswap: 'PancakeSwap', raydium: 'Raydium', meteora: 'Meteora', uniswap: 'Uniswap',
+};
+
+function prettyDex(dexId: string | undefined): string {
+  if (!dexId) return 'Other';
+  return DEX_PRETTY[dexId.toLowerCase()] ??
+    dexId.split(/[-_]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+/**
+ * Discovery for DS-ONLY chains (no GeckoTerminal network id — e.g. Robinhood
+ * Chain): sweep the search endpoint with generic queries, keep pairs on the
+ * target chain, and upsert them as TrackedPool so the batch refresher can
+ * work from them. ~6 calls per discovery pass.
+ */
+const DS_DISCOVERY_QUERIES = ['robinhood', 'USDC', 'USDT', 'WETH', 'HOOD', 'ROBIN'];
+
+interface DsSearchResponse { pairs?: (DsPair & { chainId?: string })[] | null }
+
+export async function discoverChainDexScreener(ch: ChainCode): Promise<boolean> {
+  const dsChain = DS_CHAIN[ch];
+  if (!dsChain) return false;
+  const seen = new Map<string, DsPair & { chainId?: string }>();
+  for (const q of DS_DISCOVERY_QUERIES) {
+    const json = await fetchJson<DsSearchResponse>(`${DS_BASE}/latest/dex/search?q=${encodeURIComponent(q)}`);
+    for (const pair of json?.pairs ?? []) {
+      if (pair.chainId !== dsChain || !pair.pairAddress) continue;
+      const sym = pair.baseToken?.symbol ?? '';
+      if (!sym || isDenylisted(sym)) continue;
+      seen.set(pair.pairAddress.toLowerCase(), pair);
+    }
+  }
+  if (seen.size < 3) {
+    log.warn('dexscreener discovery found too few pairs', { chain: ch, dsChain, found: seen.size });
+    return false;
+  }
+  const now = new Date();
+  for (const pair of seen.values()) {
+    await prisma.trackedPool.upsert({
+      where: { chain_address: { chain: ch, address: pair.pairAddress! } },
+      update: {
+        dexName: prettyDex(pair.dexId), baseSymbol: pair.baseToken?.symbol ?? '?',
+        baseName: pair.baseToken?.name ?? pair.baseToken?.symbol ?? '?',
+        baseAddress: pair.baseToken?.address ?? null,
+        vol24Usd: round2(Number(pair.volume?.h24 ?? 0) || 0), lastSeenAt: now,
+      },
+      create: {
+        chain: ch, address: pair.pairAddress!,
+        dexName: prettyDex(pair.dexId), baseSymbol: pair.baseToken?.symbol ?? '?',
+        baseName: pair.baseToken?.name ?? pair.baseToken?.symbol ?? '?',
+        baseAddress: pair.baseToken?.address ?? null,
+        vol24Usd: round2(Number(pair.volume?.h24 ?? 0) || 0), lastSeenAt: now,
+      },
+    });
+  }
+  log.info('dexscreener discovery', { chain: ch, dsChain, pools: seen.size });
+  return true;
+}
+
 /** Refresh one chain tick from DexScreener. Returns false → caller falls back to Gecko. */
 export async function refreshChainDexScreener(ch: ChainCode): Promise<boolean> {
   const dsChain = DS_CHAIN[ch];
@@ -63,7 +124,9 @@ export async function refreshChainDexScreener(ch: ChainCode): Promise<boolean> {
     orderBy: { vol24Usd: 'desc' },
     take: MAX_POOLS,
   });
-  if (tracked.length < 10) return false; // discovery hasn't populated enough yet
+  // DS-only chains (like Robinhood) are small — 3 pools is enough to report
+  const minPools = DS_CHAIN[ch] && ch === 'RBH' ? 3 : 10;
+  if (tracked.length < minPools) return false; // discovery hasn't populated enough yet
 
   const byAddress = new Map(tracked.map((p) => [p.address.toLowerCase(), p]));
   let calls = 0, answered = 0, volM5 = 0, txM5 = 0, tx24 = 0, dropped = 0;
@@ -113,7 +176,7 @@ export async function refreshChainDexScreener(ch: ChainCode): Promise<boolean> {
     }
   }
 
-  if (answered / tracked.length < MIN_COVERAGE) {
+  if (answered === 0 || answered / tracked.length < MIN_COVERAGE) {
     log.warn('dexscreener coverage too thin — falling back to gecko', {
       chain: ch, tracked: tracked.length, answered, calls,
     });

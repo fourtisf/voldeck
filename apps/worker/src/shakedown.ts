@@ -44,9 +44,11 @@ async function main(): Promise<void> {
   /* --- Robinhood Chain availability probe --------------------------------- */
   console.log('\n=== ROBINHOOD CHAIN PROBE ===');
   const geckoHits: string[] = [];
+  let geckoScanComplete = true;
   for (let p = 1; p <= 12; p++) {
     const page = await fetchJson<any>(`${GECKO}/networks?page=${p}`);
-    const nets = page?.data ?? [];
+    if (!page) { if (p === 1) geckoScanComplete = false; break; }
+    const nets = page.data ?? [];
     if (!nets.length) break;
     for (const n of nets) {
       const name = String(n.attributes?.name ?? '');
@@ -55,7 +57,9 @@ async function main(): Promise<void> {
   }
   console.log(geckoHits.length
     ? `GECKO indexes Robinhood: ${geckoHits.join(', ')}\n  → add to /opt/voldeck/.env:  RBH_GECKO_NETWORK=${geckoHits[0].split(' ')[0]}`
-    : 'GECKO: Robinhood Chain not indexed yet');
+    : geckoScanComplete
+      ? 'GECKO: Robinhood Chain not indexed yet'
+      : 'GECKO: probe inconclusive (rate limited) — re-run shakedown later');
   const dsSearch = await fetchJson<any>(`https://api.dexscreener.com/latest/dex/search?q=robinhood`);
   const dsChains = [...new Set(((dsSearch?.pairs ?? []) as any[]).map((p) => String(p.chainId)).filter((c) => /robin/i.test(c)))];
   console.log(dsChains.length
