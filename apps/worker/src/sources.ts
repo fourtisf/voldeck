@@ -40,12 +40,13 @@ export function startIngest(): void {
         await refreshChainDexScreener(ch);
         return;
       }
-      if (n % DISCOVERY_EVERY === 0) {
-        await ingestChainGecko(ch);
-        return;
-      }
+      // Discovery refreshes the pool universe but does NOT write the bucket:
+      // DexScreener stays the single measuring source so the series never
+      // steps up/down just because the source rotated.
+      if (n % DISCOVERY_EVERY === 0) await ingestChainGecko(ch, { writeBucket: false });
       const ok = await refreshChainDexScreener(ch);
-      if (!ok) await ingestChainGecko(ch);
+      // fallback: only here does Gecko own the number
+      if (!ok) await ingestChainGecko(ch, { writeBucket: true });
     } catch (e) {
       log.error(`ingest tick failed for ${ch}`, e);
     }

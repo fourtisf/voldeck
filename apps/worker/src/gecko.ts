@@ -73,8 +73,17 @@ function baseSymbol(poolName: string): string {
 
 const afterUnderscore = (id: string) => id.slice(id.indexOf('_') + 1);
 
-/** Full GeckoTerminal ingest for one chain tick. Also refreshes TrackedPool. */
-export async function ingestChainGecko(ch: ChainCode): Promise<boolean> {
+/**
+ * GeckoTerminal sweep for one chain.
+ *
+ * `writeBucket: false` → discovery only: refresh TrackedPool, launchpad
+ * tokens and the socials queue, but leave the volume bucket alone. The
+ * bucket value must come from ONE source (DexScreener) so the series never
+ * jumps just because the measuring source changed — the two sources cover
+ * slightly different pool sets and their m5 windows do not agree.
+ */
+export async function ingestChainGecko(ch: ChainCode, opts: { writeBucket?: boolean } = {}): Promise<boolean> {
+  const writeBucket = opts.writeBucket !== false;
   const net = geckoNetworkFor(ch);
   if (!net) return false;
   const t0 = Date.now();
@@ -151,10 +160,15 @@ export async function ingestChainGecko(ch: ChainCode): Promise<boolean> {
     return false;
   }
 
-  const bucketTs = await writeFineBucket(ch, volM5, txM5);
-  await incrementVenueHour(ch, byVenue);
+  let bucketTs: Date | null = null;
+  if (writeBucket) {
+    bucketTs = await writeFineBucket(ch, volM5, txM5);
+    await incrementVenueHour(ch, byVenue);
+    await cacheTxns24(ch, tx24);
+  }
+  // token stats are per-token absolutes (not summed into buckets), so they
+  // are safe to refresh on discovery passes too
   await upsertLaunchpadTokens(ch, byVenueToken);
-  await cacheTxns24(ch, tx24);
 
   /* refresh the tracked-pool set the DexScreener refresher works from */
   const now = new Date();
@@ -167,9 +181,10 @@ export async function ingestChainGecko(ch: ChainCode): Promise<boolean> {
   }
 
   await fetchMissingSocials(ch, net);
-  log.info('gecko ingest', {
+  log.info(writeBucket ? 'gecko ingest' : 'gecko discovery', {
     chain: ch, source: 'gecko', calls, pools, dropped, tracked: tracked.length,
-    bucket: bucketTs.toISOString(), volumeUsd: round2(volM5), latencyMs: Date.now() - t0,
+    bucket: bucketTs ? bucketTs.toISOString() : null,
+    volumeUsd: round2(volM5), wroteBucket: writeBucket, latencyMs: Date.now() - t0,
   });
   return true;
 }
