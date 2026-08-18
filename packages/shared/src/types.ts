@@ -220,5 +220,11 @@ export interface AlertsPayload {
 export interface HealthPayload {
   ok: boolean;
   mode: DataMode;
+  /** ISO ts of the newest fine bucket, null when no data at all */
+  lastBucketTs: string | null;
+  /** seconds since that bucket, null when no data at all */
+  dataAgeSec: number | null;
+  /** true when the feed has missed two 5-minute cycles */
+  stale: boolean;
   ts: string;
 }

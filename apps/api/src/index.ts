@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { getPrisma } from '@voldeck/db';
 import { isChainCode, isRangeKey, isTokenCategory, ORDER, type ChainCode } from '@voldeck/shared';
 import { API_PORT, WEB_ORIGIN, DATA_MODE } from './env';
 import { cached } from './cache';
@@ -13,7 +14,23 @@ async function main(): Promise<void> {
     origin: WEB_ORIGIN ? WEB_ORIGIN.split(',').map((s) => s.trim()) : true,
   });
 
-  app.get('/api/health', async () => ({ ok: true, mode: DATA_MODE, ts: new Date().toISOString() }));
+  app.get('/api/health', async () => {
+    const last = await getPrisma().volumeBucket.findFirst({
+      where: { tier: 'fine' },
+      orderBy: { bucketTs: 'desc' },
+      select: { bucketTs: true },
+    });
+    const ageSec = last ? Math.round((Date.now() - last.bucketTs.getTime()) / 1000) : null;
+    return {
+      ok: true,
+      mode: DATA_MODE,
+      lastBucketTs: last?.bucketTs.toISOString() ?? null,
+      dataAgeSec: ageSec,
+      // two missed 5-minute cycles → the feed is stale
+      stale: ageSec === null || ageSec > 900,
+      ts: new Date().toISOString(),
+    };
+  });
 
   app.get('/api/overview', async () =>
     cached('voldeck:api:overview', 10, buildOverview)

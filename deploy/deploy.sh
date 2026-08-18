@@ -107,8 +107,9 @@ pnpm install --frozen-lockfile
 say "Building all apps"
 pnpm build
 say "Applying database migrations"
-set -a; . "$REPO_DIR/.env"; set +a
-pnpm --filter @voldeck/db migrate:deploy
+# subshell: don't leak .env into this shell — pm2 snapshots the environment
+# at start time and re-injects it on later restarts
+( set -a; . "$REPO_DIR/.env"; set +a; pnpm --filter @voldeck/db migrate:deploy )
 
 # --- 6b. Port preflight (don't fight other apps on this VPS) ----------------
 for PORT in 3020 4020; do
@@ -123,7 +124,7 @@ done
 # drop legacy-named apps from earlier deploys so they don't hold the ports
 pm2 delete voldeck-web voldeck-api voldeck-worker >/dev/null 2>&1 || true
 say "Starting/reloading PM2 apps (volread-web :3020, volread-api :4020, volread-worker)"
-pm2 startOrReload ecosystem.config.js
+pm2 startOrReload ecosystem.config.js --update-env
 pm2 save
 pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
 ok "pm2 apps online"

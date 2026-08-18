@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import type {
   OverviewPayload, SeriesPayload, ChainDetailPayload, AlertsPayload,
   LaunchpadsPayload, LaunchpadSeriesPayload, LaunchpadTokensPayload,
-  SearchPayload, LpRangeKey, ChainCode, RangeKey,
+  SearchPayload, HealthPayload, LpRangeKey, ChainCode, RangeKey,
 } from '@voldeck/shared';
 import { reportFetch } from './conn';
 
@@ -70,6 +70,13 @@ export function useSearch(q: string | null) {
     fetcher,
     { refreshInterval: 0, keepPreviousData: true, dedupingInterval: 3_000 }
   );
+}
+
+export function useHealth() {
+  return useSWR<HealthPayload>('/api/health', fetcher, {
+    refreshInterval: 30_000,
+    keepPreviousData: true,
+  });
 }
 
 export function useChainDetail(code: ChainCode) {
