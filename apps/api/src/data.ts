@@ -338,9 +338,22 @@ export async function buildLaunchpads(): Promise<LaunchpadsPayload> {
     }))
     .filter((r) => r.volumeUsd > 0)
     .sort((a, b) => b.volumeUsd - a.volumeUsd);
+  /* real chain volume over the same window — the honest denominator for
+     "% of chain" (venue rows alone only cover venues we track) */
+  const chainRows = await prisma.volumeBucket.groupBy({
+    by: ['chain'],
+    where: { tier: 'fine', bucketTs: { gte: new Date(Date.now() - 24 * 3600_000) } },
+    _sum: { volumeUsd: true },
+  });
+  const chainVol24: Partial<Record<ChainCode, number>> = {};
+  for (const r of chainRows) {
+    if (isChainCode(r.chain)) chainVol24[r.chain] = Number(r._sum.volumeUsd ?? 0);
+  }
+
   return {
     rows,
     totalUsd: rows.reduce((s, r) => s + r.volumeUsd, 0),
+    chainVol24,
     mode: DATA_MODE,
   };
 }

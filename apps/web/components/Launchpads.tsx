@@ -181,8 +181,10 @@ export default function Launchpads() {
   }, [scrollKey, data]);
 
   const all = data?.rows ?? [];
+  // the chain's real volume, not just the venues we track — so "% of chain"
+  // means what it says
   const chainTotal = (ch: ChainCode) =>
-    all.filter((r) => r.chain === ch).reduce((s, r) => s + r.volumeUsd, 0);
+    data?.chainVol24?.[ch] ?? all.filter((r) => r.chain === ch).reduce((s, r) => s + r.volumeUsd, 0);
 
   const groups: { ch: ChainCode; rows: LaunchpadRow[] }[] =
     (chain === 'all' ? ORDER : [chain]).map((ch) => ({

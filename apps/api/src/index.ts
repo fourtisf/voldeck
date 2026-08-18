@@ -15,15 +15,20 @@ async function main(): Promise<void> {
   });
 
   app.get('/api/health', async () => {
-    const last = await getPrisma().volumeBucket.findFirst({
-      where: { tier: 'fine' },
-      orderBy: { bucketTs: 'desc' },
-      select: { bucketTs: true },
-    });
+    const prisma = getPrisma();
+    const [last, first] = await Promise.all([
+      prisma.volumeBucket.findFirst({ where: { tier: 'fine' }, orderBy: { bucketTs: 'desc' }, select: { bucketTs: true } }),
+      prisma.volumeBucket.findFirst({ where: { tier: 'fine' }, orderBy: { bucketTs: 'asc' }, select: { bucketTs: true } }),
+    ]);
     const ageSec = last ? Math.round((Date.now() - last.bucketTs.getTime()) / 1000) : null;
+    const historySec = last && first
+      ? Math.round((last.bucketTs.getTime() - first.bucketTs.getTime()) / 1000)
+      : 0;
     return {
       ok: true,
       mode: DATA_MODE,
+      firstBucketTs: first?.bucketTs.toISOString() ?? null,
+      historySec,
       lastBucketTs: last?.bucketTs.toISOString() ?? null,
       dataAgeSec: ageSec,
       // two missed 5-minute cycles → the feed is stale

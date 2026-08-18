@@ -6,7 +6,7 @@
  * the orchestrator fall back to a full GeckoTerminal ingest for that tick.
  */
 import { getPrisma } from '@voldeck/db';
-import { isDenylisted, type ChainCode } from '@voldeck/shared';
+import { isDenylisted, classifyVenue, type ChainCode } from '@voldeck/shared';
 import { RBH_DS_CHAIN } from './env';
 import { fetchJson } from './gecko';
 import {
@@ -23,7 +23,10 @@ const DS_CHAIN: Partial<Record<ChainCode, string>> = {
   ...(RBH_DS_CHAIN ? { RBH: RBH_DS_CHAIN } : {}),
 };
 const BATCH = 30;
-const MAX_POOLS = 180;
+/** top pools by volume kept in the refresh set */
+const MAX_TOP_POOLS = 180;
+/** launchpad pools are always refreshed on top of those (they rank low by volume) */
+const MAX_LAUNCHPAD_POOLS = 150;
 /** below this fraction of answered pools the data is too thin — fall back */
 const MIN_COVERAGE = 0.3;
 
@@ -119,11 +122,27 @@ export async function refreshChainDexScreener(ch: ChainCode): Promise<boolean> {
   if (!dsChain) return false;
   const t0 = Date.now();
 
-  const tracked = await prisma.trackedPool.findMany({
+  /**
+   * Refresh set = the biggest pools by volume PLUS every launchpad pool.
+   * Ranking purely by volume buried launchpad pools behind the big DEX
+   * pairs, so the Launchpads panel starved even though discovery had found
+   * them.
+   */
+  const all = await prisma.trackedPool.findMany({
     where: { chain: ch, lastSeenAt: { gte: new Date(Date.now() - 24 * 3600_000) } },
     orderBy: { vol24Usd: 'desc' },
-    take: MAX_POOLS,
+    take: 800,
   });
+  const picked = new Map<string, (typeof all)[number]>();
+  for (const p of all.slice(0, MAX_TOP_POOLS)) picked.set(p.address, p);
+  let lp = 0;
+  for (const p of all) {
+    if (lp >= MAX_LAUNCHPAD_POOLS) break;
+    if (classifyVenue(p.dexName) !== 'launchpad' || picked.has(p.address)) continue;
+    picked.set(p.address, p);
+    lp++;
+  }
+  const tracked = [...picked.values()];
   // DS-only chains (like Robinhood) are small — 3 pools is enough to report
   const minPools = DS_CHAIN[ch] && ch === 'RBH' ? 3 : 10;
   if (tracked.length < minPools) return false; // discovery hasn't populated enough yet

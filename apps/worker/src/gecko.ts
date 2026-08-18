@@ -6,7 +6,7 @@
  * refresh fails. Budget worst case stays far under the rate limit.
  */
 import { getPrisma } from '@voldeck/db';
-import { isDenylisted, type ChainCode } from '@voldeck/shared';
+import { isDenylisted, classifyVenue, type ChainCode } from '@voldeck/shared';
 import { GECKO_BASE, geckoNetworkFor } from './env';
 import {
   writeFineBucket, writeVenueBucket, upsertLaunchpadTokens, cacheTxns24,
@@ -73,6 +73,38 @@ function baseSymbol(poolName: string): string {
 
 const afterUnderscore = (id: string) => id.slice(id.indexOf('_') + 1);
 
+const LAUNCHPAD_DEX_PAGES = 2;
+const MAX_LAUNCHPAD_DEXES = 6;
+
+interface GeckoDexList {
+  data?: { id: string; attributes?: { name?: string } }[];
+}
+
+/**
+ * Launchpad pools rank far below the big DEX pairs by 24h volume, so a
+ * global top-N sweep misses them almost entirely — which left the
+ * Launchpads panel empty on chains whose launchpads are not the largest
+ * venue. Ask GeckoTerminal for each launchpad DEX's own pools instead.
+ * The DEX list is fetched live, so new launchpads appear without a code
+ * change. Costs ~7 extra calls per chain per discovery pass (~30 min).
+ */
+async function launchpadDexPages(net: string): Promise<string[]> {
+  const list = await fetchJson<GeckoDexList>(`${GECKO_BASE}/networks/${net}/dexes`);
+  const dexes = (list?.data ?? [])
+    .filter((d) => classifyVenue(d.attributes?.name ?? d.id) === 'launchpad')
+    .slice(0, MAX_LAUNCHPAD_DEXES);
+  const urls: string[] = [];
+  for (const d of dexes) {
+    for (let page = 1; page <= LAUNCHPAD_DEX_PAGES; page++) {
+      urls.push(`${GECKO_BASE}/networks/${net}/dexes/${d.id}/pools?page=${page}&sort=h24_volume_usd_desc&include=dex,base_token`);
+    }
+  }
+  if (dexes.length) {
+    log.info('launchpad dexes found', { network: net, dexes: dexes.map((d) => d.attributes?.name ?? d.id) });
+  }
+  return urls;
+}
+
 /**
  * GeckoTerminal sweep for one chain.
  *
@@ -95,8 +127,18 @@ export async function ingestChainGecko(ch: ChainCode, opts: { writeBucket?: bool
   const tracked: { address: string; dexName: string; baseSymbol: string; baseName: string; baseAddress: string | null; vol24: number }[] = [];
   let anyPageOk = false;
 
-  for (let page = 1; page <= PAGES; page++) {
-    const url = `${GECKO_BASE}/networks/${net}/pools?page=${page}&sort=h24_volume_usd_desc&include=dex,base_token`;
+  const urls = [
+    ...Array.from({ length: PAGES }, (_, i) =>
+      `${GECKO_BASE}/networks/${net}/pools?page=${i + 1}&sort=h24_volume_usd_desc&include=dex,base_token`),
+    // launchpad-specific pools: they never crack the global top-N by volume
+    ...(await launchpadDexPages(net)),
+  ];
+  calls++; // the dex-list call above
+  // a pool can appear in both sweeps — count it once
+  const seenPools = new Set<string>();
+
+  for (let u = 0; u < urls.length; u++) {
+    const url = urls[u];
     calls++;
     const json = await fetchJson<GeckoPage>(url);
     if (!json) continue;
@@ -110,6 +152,9 @@ export async function ingestChainGecko(ch: ChainCode, opts: { writeBucket?: bool
     for (const pool of json.data ?? []) {
       const sym = baseSymbol(pool.attributes?.name ?? '');
       if (!sym || isDenylisted(sym)) { dropped++; continue; }
+      const poolAddr = pool.id ? afterUnderscore(pool.id) : '';
+      if (poolAddr && seenPools.has(poolAddr)) continue;
+      if (poolAddr) seenPools.add(poolAddr);
       pools++;
       const m5 = Number(pool.attributes?.volume_usd?.m5 ?? 0) || 0;
       volM5 += m5;
@@ -152,7 +197,7 @@ export async function ingestChainGecko(ch: ChainCode, opts: { writeBucket?: bool
       if (created && (!agg.launchedAt || created < agg.launchedAt)) agg.launchedAt = created;
       dexTokens.set(tokSymbol, agg);
     }
-    if (page < PAGES) await sleep(PAGE_DELAY_MS);
+    if (u < urls.length - 1) await sleep(PAGE_DELAY_MS);
   }
 
   if (!anyPageOk) {

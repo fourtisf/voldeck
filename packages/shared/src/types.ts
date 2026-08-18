@@ -121,6 +121,8 @@ export interface LaunchpadsPayload {
   /** all venues across all chains, last 24h, sorted by volume desc */
   rows: LaunchpadRow[];
   totalUsd: number;
+  /** each chain's real 24h volume — the denominator for "% of chain" */
+  chainVol24: Partial<Record<ChainCode, number>>;
   mode: DataMode;
 }
 
@@ -220,6 +222,10 @@ export interface AlertsPayload {
 export interface HealthPayload {
   ok: boolean;
   mode: DataMode;
+  /** ISO ts of the oldest fine bucket — how far back the history reaches */
+  firstBucketTs: string | null;
+  /** seconds of history accumulated so far (0 when empty) */
+  historySec: number;
   /** ISO ts of the newest fine bucket, null when no data at all */
   lastBucketTs: string | null;
   /** seconds since that bucket, null when no data at all */

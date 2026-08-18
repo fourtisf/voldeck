@@ -33,6 +33,11 @@ export default function StatusBar() {
           data {ageLabel(health.dataAgeSec)} old
         </span>
       )}
+      {/* how far back our own history reaches — until it passes 24h the
+          "24H" figures cover less than a day, and saying so beats guessing */}
+      {health != null && health.historySec > 0 && health.historySec < 24 * 3600 && (
+        <span className="sim">history {ageLabel(health.historySec)} of 24h</span>
+      )}
       <span className="sp"></span>
       {awaiting && <span className="sim">AWAITING FIRST DATA</span>}
       {stale && <span className="err" style={{ fontWeight: 600 }}>STALE FEED</span>}
