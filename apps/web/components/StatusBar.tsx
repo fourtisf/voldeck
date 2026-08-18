@@ -16,7 +16,9 @@ function ageLabel(sec: number): string {
 export default function StatusBar() {
   const conn = useSyncExternalStore(subscribeConn, getConnState, () => serverSnapshot);
   const { data: health } = useHealth();
-  const stale = health?.stale === true;
+  // no buckets at all = a fresh/wiped database still filling, not a dead feed
+  const awaiting = health?.lastBucketTs === null;
+  const stale = health?.stale === true && !awaiting;
 
   return (
     <div className="statusbar">
@@ -32,6 +34,7 @@ export default function StatusBar() {
         </span>
       )}
       <span className="sp"></span>
+      {awaiting && <span className="sim">AWAITING FIRST DATA</span>}
       {stale && <span className="err" style={{ fontWeight: 600 }}>STALE FEED</span>}
       {health?.mode === 'sim' && <span className="sim">SIM DATA</span>}
     </div>

@@ -155,7 +155,8 @@ curl -fsS -o /dev/null -w "web: HTTP %{http_code}\n" localhost:3020/ || warn "we
 
 IP="$(curl -fsS -4 --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 echo
-ok "DONE — VOLREAD deployed (SIM mode)."
+MODE_NOW="$(grep -E '^DATA_MODE=' "$REPO_DIR/.env" | cut -d= -f2 || echo '?')"
+ok "DONE — VOLREAD deployed (DATA_MODE=$MODE_NOW)."
 if [ -n "$DOMAIN" ]; then
   echo "  Open:  http://$DOMAIN   (then: certbot --nginx -d $DOMAIN -d www.$DOMAIN for HTTPS)"
 else
