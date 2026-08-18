@@ -11,9 +11,17 @@ const prisma = getPrisma();
 
 export const round2 = (v: number): number => Math.round(v * 100) / 100;
 
-/** The just-completed aligned 5m bucket (the m5 rolling window ≈ this). */
-export function currentFineBucketTs(): Date {
-  return new Date(Math.floor(Date.now() / FINE_MS) * FINE_MS - FINE_MS);
+/**
+ * The aligned 5m bucket that an m5 rolling window belongs to.
+ *
+ * The window is [now-5m, now]; we assign it to the bucket containing its
+ * MIDPOINT. Using floor(now)-5m instead made a tick at :59 write the "":50"
+ * bucket even though its data covered :54-:59, so consecutive ticks
+ * overwrote each other's buckets and volume silently disappeared.
+ */
+export function currentFineBucketTs(now = Date.now()): Date {
+  const mid = now - FINE_MS / 2;
+  return new Date(Math.floor(mid / FINE_MS) * FINE_MS);
 }
 
 export async function writeFineBucket(ch: ChainCode, volumeUsd: number, txns: number): Promise<Date> {
@@ -27,15 +35,24 @@ export async function writeFineBucket(ch: ChainCode, volumeUsd: number, txns: nu
   return bucketTs;
 }
 
-export async function incrementVenueHour(ch: ChainCode, byVenue: Map<string, number>): Promise<void> {
-  const hourTs = new Date(Math.floor(Date.now() / 3600_000) * 3600_000);
+/**
+ * Venue volume for one 5m bucket, written ABSOLUTELY on the same bucket
+ * timestamp as the chain bucket.
+ *
+ * This used to increment an hourly row, which double-counted whenever two
+ * sources (or a repeated tick) covered the same window — venue totals then
+ * exceeded the chain total they are a subset of. Readers sum rows over a
+ * window, so 5m granularity works unchanged and re-running a tick is
+ * idempotent.
+ */
+export async function writeVenueBucket(ch: ChainCode, byVenue: Map<string, number>, bucketTs: Date): Promise<void> {
   for (const [venue, vol] of byVenue) {
     const v = round2(vol);
     if (v <= 0) continue;
     await prisma.venueVolume.upsert({
-      where: { chain_venue_ts: { chain: ch, venue, ts: hourTs } },
-      update: { volumeUsd: { increment: v } },
-      create: { chain: ch, venue, ts: hourTs, volumeUsd: v },
+      where: { chain_venue_ts: { chain: ch, venue, ts: bucketTs } },
+      update: { volumeUsd: v },
+      create: { chain: ch, venue, ts: bucketTs, volumeUsd: v },
     });
   }
 }

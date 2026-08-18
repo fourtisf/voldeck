@@ -9,7 +9,7 @@ import { getPrisma } from '@voldeck/db';
 import { isDenylisted, type ChainCode } from '@voldeck/shared';
 import { GECKO_BASE, geckoNetworkFor } from './env';
 import {
-  writeFineBucket, incrementVenueHour, upsertLaunchpadTokens, cacheTxns24,
+  writeFineBucket, writeVenueBucket, upsertLaunchpadTokens, cacheTxns24,
   round2, type LiveTokenAgg,
 } from './ingestCommon';
 import { log } from './log';
@@ -163,7 +163,7 @@ export async function ingestChainGecko(ch: ChainCode, opts: { writeBucket?: bool
   let bucketTs: Date | null = null;
   if (writeBucket) {
     bucketTs = await writeFineBucket(ch, volM5, txM5);
-    await incrementVenueHour(ch, byVenue);
+    await writeVenueBucket(ch, byVenue, bucketTs);
     await cacheTxns24(ch, tx24);
   }
   // token stats are per-token absolutes (not summed into buckets), so they

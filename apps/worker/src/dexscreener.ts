@@ -10,7 +10,7 @@ import { isDenylisted, type ChainCode } from '@voldeck/shared';
 import { RBH_DS_CHAIN } from './env';
 import { fetchJson } from './gecko';
 import {
-  writeFineBucket, incrementVenueHour, upsertLaunchpadTokens, cacheTxns24,
+  writeFineBucket, writeVenueBucket, upsertLaunchpadTokens, cacheTxns24,
   round2, type LiveTokenAgg,
 } from './ingestCommon';
 import { log } from './log';
@@ -184,7 +184,7 @@ export async function refreshChainDexScreener(ch: ChainCode): Promise<boolean> {
   }
 
   const bucketTs = await writeFineBucket(ch, volM5, txM5);
-  await incrementVenueHour(ch, byVenue);
+  await writeVenueBucket(ch, byVenue, bucketTs);
   await upsertLaunchpadTokens(ch, byVenueToken);
   await cacheTxns24(ch, tx24);
 

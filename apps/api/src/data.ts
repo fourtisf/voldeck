@@ -85,12 +85,33 @@ interface ChainMetrics {
   coarse48h: (number | null)[];
 }
 
-async function txns24(ch: ChainCode, v24: number): Promise<number> {
-  try {
-    const cached = await getRedis().get(`voldeck:txns24:${ch}`);
-    if (cached) return Number(cached);
-  } catch { /* fall through */ }
-  return v24 / CHAINS[ch].avgTrade;
+/**
+ * Transactions over the SAME window we measured volume in — summed from our
+ * own buckets. The source's own h24 count would cover 24h even when we have
+ * only minutes of history, making txns and volume incomparable (and avg
+ * trade size nonsense).
+ */
+async function txnsByChain(fromTs: number): Promise<Partial<Record<ChainCode, number>>> {
+  const rows = await prisma.volumeBucket.groupBy({
+    by: ['chain'],
+    where: { tier: 'coarse', bucketTs: { gte: new Date(fromTs) } },
+    _sum: { txns: true },
+  });
+  const out: Partial<Record<ChainCode, number>> = {};
+  for (const r of rows) if (isChainCode(r.chain)) out[r.chain] = r._sum.txns ?? 0;
+  return out;
+}
+
+/** Pairs actually being tracked right now; falls back to config when empty (sim). */
+async function pairsByChain(): Promise<Partial<Record<ChainCode, number>>> {
+  const rows = await prisma.trackedPool.groupBy({
+    by: ['chain'],
+    where: { lastSeenAt: { gte: new Date(Date.now() - 24 * 3600_000) } },
+    _count: { _all: true },
+  });
+  const out: Partial<Record<ChainCode, number>> = {};
+  for (const r of rows) if (isChainCode(r.chain)) out[r.chain] = r._count._all;
+  return out;
 }
 
 async function computeMetrics(): Promise<{ M: Record<ChainCode, ChainMetrics>; T: { v1: number; v6: number; v24: number; p24: number; d24: number; tx: number } }> {
@@ -98,6 +119,8 @@ async function computeMetrics(): Promise<{ M: Record<ChainCode, ChainMetrics>; T
   const fineAnchor = tierAnchor('fine');
   const coarse = await fetchSlots(ORDER, 'coarse', 192, coarseAnchor); // 48h
   const fine = await fetchSlots(ORDER, 'fine', 144, fineAnchor);       // 12h
+
+  const txns = await txnsByChain(coarseAnchor - 96 * COARSE_MS);
 
   const M = {} as Record<ChainCode, ChainMetrics>;
   const T = { v1: 0, v6: 0, v24: 0, p24: 0, d24: 0, tx: 0 };
@@ -108,7 +131,7 @@ async function computeMetrics(): Promise<{ M: Record<ChainCode, ChainMetrics>; T
     const v1 = sumTail(f, 12), p1 = sumTail(f, 12, 12);
     // last completed fine bucket (the anchor bucket is still accumulating)
     const v5 = f[f.length - 2] ?? f[f.length - 1] ?? 0;
-    const tx = await txns24(ch, v24);
+    const tx = txns[ch] ?? 0;
     M[ch] = {
       v5, v1, v6, v24, p24,
       d1: p1 > 0 ? ((v1 - p1) / p1) * 100 : 0,
@@ -143,7 +166,9 @@ async function surgingSet(): Promise<Set<ChainCode>> {
 export async function buildOverview(): Promise<OverviewPayload> {
   const { M, T } = await computeMetrics();
   const surging = await surgingSet();
+  const pairs = await pairsByChain();
   const coarseAnchor = tierAnchor('coarse');
+  const trackedTotal = ORDER.reduce((s, c) => s + (pairs[c] ?? 0), 0);
 
   const chains: OverviewChainRow[] = ORDER.map((ch) => ({
     chain: ch,
@@ -159,7 +184,8 @@ export async function buildOverview(): Promise<OverviewPayload> {
     stats: {
       vol24: T.v24, d24: T.d24, vol1h: T.v1, vol6h: T.v6,
       txns24: T.tx,
-      pairs: ORDER.reduce((s, c) => s + CHAINS[c].pairs, 0),
+      // real tracked pools; config figure only while nothing is tracked (sim)
+      pairs: trackedTotal > 0 ? trackedTotal : ORDER.reduce((s, c) => s + CHAINS[c].pairs, 0),
       leader: { chain: leader, share: M[leader].share },
     },
     chains,
@@ -242,6 +268,7 @@ export async function buildChainDetail(code: ChainCode): Promise<ChainDetailPayl
     .slice(0, 8);
 
   const rank = [...ORDER].sort((a, b) => M[b].v24 - M[a].v24).indexOf(code) + 1;
+  const trackedPairs = (await pairsByChain())[code] ?? 0;
 
   return {
     chain: code,
@@ -252,8 +279,9 @@ export async function buildChainDetail(code: ChainCode): Promise<ChainDetailPayl
       txns24: m.tx,
       peakHourUtc: peakTs.getUTCHours(),
       peakHourVol: heat[pk],
-      avgTrade: CHAINS[code].avgTrade,
-      pairs: CHAINS[code].pairs,
+      // avg trade from what we actually measured, not a config constant
+      avgTrade: m.tx > 0 ? m.v24 / m.tx : CHAINS[code].avgTrade,
+      pairs: trackedPairs > 0 ? trackedPairs : CHAINS[code].pairs,
       share: m.share, sharePrev: m.sharePrev, rot: m.rot,
     },
     venues,
